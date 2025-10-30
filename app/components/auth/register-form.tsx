@@ -20,14 +20,19 @@ interface RegisterFormProps {
 
 export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
   const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
+    if (!email || !username || !password) {
+      setError("Email, username, and password are required.");
+      return;
+    }
 
     if (password !== confirmPassword) {
       setError("Passwords do not match");
@@ -37,10 +42,12 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
     setLoading(true);
 
     try {
-      const response = await fetch("/api/v1/auth/register", {
+      const apiUrl =
+        process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+      const response = await fetch(`${apiUrl}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, username, password }),
       });
 
       const data = await response.json();
@@ -50,7 +57,9 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
         return;
       }
 
-      localStorage.setItem("token", data.token);
+      if (data.token) {
+        localStorage.setItem("token", data.token);
+      }
       window.location.href = "/dashboard";
     } catch (err) {
       setError("An error occurred. Please try again.");
@@ -88,6 +97,17 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
               placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              disabled={loading}
+              className="bg-input border-border/50"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Username</label>
+            <Input
+              type="text"
+              placeholder="your username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               disabled={loading}
               className="bg-input border-border/50"
             />

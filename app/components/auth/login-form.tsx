@@ -20,6 +20,7 @@ interface LoginFormProps {
 
 export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
   const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -29,11 +30,21 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
     setError("");
     setLoading(true);
 
+    // Basic validation
+    if (!email || !username || !password) {
+      setError("Email, username, and password are required.");
+      setLoading(false);
+      return;
+    }
+
     try {
-      const response = await fetch("/api/v1/auth/login", {
+      const apiUrl =
+        process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+      const response = await fetch(`${apiUrl}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, username, password }),
+        credentials: "include", // if backend sets cookies
       });
 
       const data = await response.json();
@@ -43,7 +54,10 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
         return;
       }
 
-      localStorage.setItem("token", data.token);
+      // Save JWT token if returned
+      if (data.token) {
+        localStorage.setItem("token", data.token);
+      }
       window.location.href = "/dashboard";
     } catch (err) {
       setError("An error occurred. Please try again.");
@@ -81,6 +95,17 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
               placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              disabled={loading}
+              className="bg-input border-border/50"
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Username</label>
+            <Input
+              type="text"
+              placeholder="your username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               disabled={loading}
               className="bg-input border-border/50"
             />
