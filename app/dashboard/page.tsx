@@ -1,9 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { DashboardLayout } from "@/components/layout/dashboard-layout"
-import { ProjectCard } from "@/components/projects/project-card"
-import { Button } from "@/components/ui/button"
+import { DashboardLayout } from "@/app/components/layouts/dashboard-layout"
+import { ProjectCard } from "@/app/components/projects/project-card"
+import { Button } from "@/app/components/ui/button"
 import { Plus } from "lucide-react"
 
 // Mock data - will be replaced with API calls

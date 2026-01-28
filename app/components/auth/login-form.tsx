@@ -3,6 +3,7 @@
 import type React from "react";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
 import {
@@ -24,6 +25,8 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState("");
+  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,7 +61,10 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
       if (data.token) {
         localStorage.setItem("token", data.token);
       }
-      window.location.href = "/dashboard";
+      setSuccess("Login successful! Redirecting to dashboard...");
+      setTimeout(() => {
+        router.push("/dashboard");
+      }, 1200);
     } catch (err) {
       setError("An error occurred. Please try again.");
     } finally {
@@ -85,6 +91,11 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
             <div className="flex gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
               <AlertCircle className="w-4 h-4 text-destructive flex-flex-shrink-0 mt-0.5" />
               <p className="text-sm text-destructive">{error}</p>
+            </div>
+          )}
+          {success && (
+            <div className="flex gap-2 p-3 rounded-lg bg-green-100 border border-green-300">
+              <p className="text-sm text-green-700 font-medium">{success}</p>
             </div>
           )}
 

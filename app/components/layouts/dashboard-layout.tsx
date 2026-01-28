@@ -1,37 +1,51 @@
-"use client"
+"use client";
 
-import type React from "react"
+import type React from "react";
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { Sidebar } from "./sidebar"
-import { Header } from "./header"
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Sidebar } from "./sidebar";
+import { Header } from "./header";
+import DashboardPage from "@/app/dashboard/page";
 
 interface DashboardLayoutProps {
-  children: React.ReactNode
+  children: React.ReactNode;
 }
 
 export function DashboardLayout({ children }: DashboardLayoutProps) {
-  const router = useRouter()
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const router = useRouter();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const token = localStorage.getItem("token")
-    if (!token) {
-      router.push("/")
-      return
-    }
-    setIsAuthenticated(true)
-    setLoading(false)
-  }, [router])
+    const checkAuth = async () => {
+      try {
+        const apiUrl =
+          process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+        const res = await fetch(`${apiUrl}/auth/current-user`, {
+          method: "GET",
+          credentials: "include", // send cookies
+        });
+        if (res.ok) {
+          setIsAuthenticated(true);
+        } else {
+          router.push("/");
+        }
+      } catch {
+        router.push("/");
+      } finally {
+        setLoading(false);
+      }
+    };
+    checkAuth();
+  }, [router]);
 
   if (loading) {
-    return <div className="min-h-screen bg-background" />
+    return <div className="min-h-screen bg-background" />;
   }
 
   if (!isAuthenticated) {
-    return null
+    return null;
   }
 
   return (
@@ -44,5 +58,5 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
         </main>
       </div>
     </div>
-  )
+  );
 }
