@@ -4,6 +4,7 @@ import { useState } from "react"
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Plus, Filter } from "lucide-react"
 
@@ -60,6 +61,12 @@ const mockTasks = [
   },
 ]
 
+const statusBadgeClass: Record<string, string> = {
+  Completed: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400",
+  "In Progress": "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
+  "To Do": "bg-muted text-muted-foreground",
+}
+
 export default function TasksPage() {
   const [tasks] = useState(mockTasks)
   const [filter, setFilter] = useState("all")
@@ -74,62 +81,64 @@ export default function TasksPage() {
       <div className="space-y-8">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Tasks</h1>
-            <p className="text-muted-foreground mt-2">Manage and track all project tasks</p>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Tasks</h1>
+            <p className="text-muted-foreground mt-1 text-sm">Manage and track all project tasks</p>
           </div>
-          <Button className="gap-2 bg-primary hover:bg-primary/90">
+          <Button className="gap-2">
             <Plus className="w-4 h-4" />
             New Task
           </Button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="border-border/50">
+          <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-muted-foreground">Total Tasks</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold text-foreground">{tasks.length}</p>
+              <p className="text-2xl font-semibold tracking-tight text-foreground">{tasks.length}</p>
             </CardContent>
           </Card>
-          <Card className="border-border/50">
+          <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-muted-foreground">In Progress</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold text-foreground">
+              <p className="text-2xl font-semibold tracking-tight text-foreground">
                 {tasks.filter((t) => t.status === "In Progress").length}
               </p>
             </CardContent>
           </Card>
-          <Card className="border-border/50">
+          <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-muted-foreground">Completed</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold text-foreground">
+              <p className="text-2xl font-semibold tracking-tight text-foreground">
                 {tasks.filter((t) => t.status === "Completed").length}
               </p>
             </CardContent>
           </Card>
-          <Card className="border-border/50">
+          <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-muted-foreground">To Do</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold text-foreground">{tasks.filter((t) => t.status === "To Do").length}</p>
+              <p className="text-2xl font-semibold tracking-tight text-foreground">
+                {tasks.filter((t) => t.status === "To Do").length}
+              </p>
             </CardContent>
           </Card>
         </div>
 
-        <Card className="border-border/50">
+        <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle>All Tasks</CardTitle>
                 <CardDescription>View and manage all tasks across projects</CardDescription>
               </div>
-              <Button variant="outline" size="sm" className="gap-2 bg-transparent">
+              <Button variant="outline" size="sm" className="gap-2">
                 <Filter className="w-4 h-4" />
                 Filter
               </Button>
@@ -149,32 +158,20 @@ export default function TasksPage() {
                   {filteredTasks.map((task) => (
                     <div
                       key={task.id}
-                      className="flex items-center justify-between p-4 rounded-lg border border-border/50 hover:border-primary/50 transition-colors"
+                      className="flex items-center justify-between p-4 rounded-xl border hover:border-primary/40 transition-colors"
                     >
                       <div className="flex-1">
                         <h3 className="font-medium text-foreground">{task.title}</h3>
                         <p className="text-sm text-muted-foreground mt-1">{task.description}</p>
                         <div className="flex items-center gap-4 mt-3">
-                          <span className="text-xs px-2 py-1 rounded-full bg-secondary text-secondary-foreground">
-                            {task.priority}
-                          </span>
-                          <span className="text-xs text-muted-foreground">Due: {task.dueDate}</span>
-                          <span className="text-xs text-muted-foreground">Assigned to: {task.assignee}</span>
+                          <Badge variant="secondary">{task.priority}</Badge>
+                          <span className="text-xs text-muted-foreground">Due {task.dueDate}</span>
+                          <span className="text-xs text-muted-foreground">Assigned to {task.assignee}</span>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={`text-xs px-3 py-1 rounded-full font-medium ${
-                            task.status === "Completed"
-                              ? "bg-green-500/20 text-green-400"
-                              : task.status === "In Progress"
-                                ? "bg-blue-500/20 text-blue-400"
-                                : "bg-gray-500/20 text-gray-400"
-                          }`}
-                        >
-                          {task.status}
-                        </span>
-                      </div>
+                      <Badge className={statusBadgeClass[task.status] ?? "bg-muted text-muted-foreground"}>
+                        {task.status}
+                      </Badge>
                     </div>
                   ))}
                 </div>

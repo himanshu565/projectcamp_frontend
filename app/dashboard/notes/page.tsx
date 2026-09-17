@@ -65,42 +65,40 @@ export default function NotesPage() {
     return matchesSearch && matchesCategory
   })
 
-  const getCategoryColor = (category: string) => {
-    const colors: Record<string, string> = {
-      Design: "bg-purple-500/20 text-purple-400",
-      Development: "bg-blue-500/20 text-blue-400",
-      Meeting: "bg-green-500/20 text-green-400",
-      Feedback: "bg-orange-500/20 text-orange-400",
-    }
-    return colors[category] || "bg-gray-500/20 text-gray-400"
+  const categoryColors: Record<string, string> = {
+    Design: "bg-purple-50 text-purple-700 dark:bg-purple-500/10 dark:text-purple-400",
+    Development: "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
+    Meeting: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400",
+    Feedback: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
   }
+  const getCategoryColor = (category: string) => categoryColors[category] || "bg-muted text-muted-foreground"
 
   return (
     <DashboardLayout>
       <div className="space-y-8">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Notes</h1>
-            <p className="text-muted-foreground mt-2">Create and organize project notes</p>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">Notes</h1>
+            <p className="text-muted-foreground mt-1 text-sm">Create and organize project notes</p>
           </div>
-          <Button className="gap-2 bg-primary hover:bg-primary/90">
+          <Button className="gap-2">
             <Plus className="w-4 h-4" />
             New Note
           </Button>
         </div>
 
-        <Card className="border-border/50">
+        <Card>
           <CardHeader>
             <CardTitle>Search & Filter</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="relative">
-              <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder="Search notes..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10 bg-input border-border/50"
+                className="pl-9"
               />
             </div>
 
@@ -111,7 +109,6 @@ export default function NotesPage() {
                   variant={selectedCategory === category ? "default" : "outline"}
                   size="sm"
                   onClick={() => setSelectedCategory(category)}
-                  className={selectedCategory === category ? "bg-primary hover:bg-primary/90" : "bg-transparent"}
                 >
                   {category}
                 </Button>
@@ -120,11 +117,11 @@ export default function NotesPage() {
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredNotes.map((note) => (
             <Card
               key={note.id}
-              className="border-border/50 hover:border-primary/50 transition-all cursor-pointer group"
+              className="hover:shadow-md hover:border-primary/40 transition-all cursor-pointer group"
             >
               <CardHeader>
                 <div className="flex items-start justify-between gap-2">
@@ -133,21 +130,21 @@ export default function NotesPage() {
                       {note.title}
                     </CardTitle>
                     <span
-                      className={`inline-block mt-2 text-xs px-2 py-1 rounded-full ${getCategoryColor(note.category)}`}
+                      className={`inline-block mt-2 text-xs font-medium px-2 py-0.5 rounded-full ${getCategoryColor(note.category)}`}
                     >
                       {note.category}
                     </span>
                   </div>
-                  <Button variant="ghost" size="sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button variant="ghost" size="icon-sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
                     <Edit2 className="w-4 h-4" />
                   </Button>
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <p className="text-sm text-muted-foreground line-clamp-3">{note.content}</p>
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>Updated: {note.updatedAt}</span>
-                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0 hover:text-destructive">
+                <div className="flex items-center justify-between text-xs text-muted-foreground pt-3 border-t">
+                  <span>Updated {note.updatedAt}</span>
+                  <Button variant="ghost" size="icon-sm" className="h-6 w-6 hover:text-destructive">
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>
@@ -157,7 +154,7 @@ export default function NotesPage() {
         </div>
 
         {filteredNotes.length === 0 && (
-          <Card className="border-border/50">
+          <Card>
             <CardContent className="py-12 text-center">
               <p className="text-muted-foreground">No notes found. Create a new note to get started.</p>
             </CardContent>

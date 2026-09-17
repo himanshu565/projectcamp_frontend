@@ -41,7 +41,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   }, [router]);
 
   if (loading) {
-    return <div className="min-h-screen bg-background" />;
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="size-6 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+      </div>
+    );
   }
 
   if (!isAuthenticated) {
@@ -54,7 +58,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
       <div className="flex-1 flex flex-col overflow-hidden">
         <Header />
         <main className="flex-1 overflow-auto">
-          <div className="p-8">{children}</div>
+          <div className="max-w-7xl mx-auto p-6 lg:p-8">{children}</div>
         </main>
       </div>
     </div>

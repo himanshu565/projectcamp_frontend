@@ -21,7 +21,7 @@ export function TaskList({ tasks, loading }: TaskListProps) {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "done":
-        return <CheckCircle2 className="w-4 h-4 text-green-500" />;
+        return <CheckCircle2 className="w-4 h-4 text-emerald-500" />;
       case "in_progress":
         return <Clock className="w-4 h-4 text-blue-500" />;
       default:
@@ -33,19 +33,19 @@ export function TaskList({ tasks, loading }: TaskListProps) {
     switch (status) {
       case "done":
         return (
-          <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+          <Badge className="bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 border-transparent">
             Done
           </Badge>
         );
       case "in_progress":
         return (
-          <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">
+          <Badge className="bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400 border-transparent">
             In Progress
           </Badge>
         );
       default:
         return (
-          <Badge className="bg-muted text-muted-foreground border-border">
+          <Badge variant="outline" className="text-muted-foreground">
             Todo
           </Badge>
         );
@@ -56,7 +56,7 @@ export function TaskList({ tasks, loading }: TaskListProps) {
     return (
       <div className="space-y-3">
         {[...Array(3)].map((_, i) => (
-          <div key={i} className="h-20 bg-card/50 rounded-lg animate-pulse" />
+          <div key={i} className="h-20 bg-muted/60 rounded-xl animate-pulse" />
         ))}
       </div>
     );
@@ -64,7 +64,7 @@ export function TaskList({ tasks, loading }: TaskListProps) {
 
   if (tasks.length === 0) {
     return (
-      <div className="text-center py-12 text-muted-foreground">
+      <div className="text-center py-12 text-muted-foreground text-sm">
         No tasks yet. Create one to get started!
       </div>
     );
@@ -75,7 +75,7 @@ export function TaskList({ tasks, loading }: TaskListProps) {
       {tasks.map((task) => (
         <Card
           key={task.id}
-          className="border-border/50 hover:border-primary/50 transition-all cursor-pointer"
+          className="transition-colors hover:border-primary/40 cursor-pointer"
         >
           <CardContent className="p-4">
             <div className="flex items-start gap-4">

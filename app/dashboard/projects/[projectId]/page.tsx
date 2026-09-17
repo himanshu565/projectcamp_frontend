@@ -13,7 +13,6 @@ import {
   CardTitle,
 } from "@/app/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
-import { Plus } from "lucide-react";
 
 interface Project {
   id: string;
@@ -119,18 +118,16 @@ export default function ProjectPage() {
       <div className="space-y-8">
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-foreground">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
               {project.name}
             </h1>
             <p className="text-muted-foreground mt-2">{project.description}</p>
           </div>
-          <Button className="bg-primary hover:bg-primary/90">
-            Edit Project
-          </Button>
+          <Button>Edit Project</Button>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card className="border-border/50">
+          <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Status
@@ -142,7 +139,7 @@ export default function ProjectPage() {
               </p>
             </CardContent>
           </Card>
-          <Card className="border-border/50">
+          <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Start Date
@@ -154,7 +151,7 @@ export default function ProjectPage() {
               </p>
             </CardContent>
           </Card>
-          <Card className="border-border/50">
+          <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 End Date
@@ -166,7 +163,7 @@ export default function ProjectPage() {
               </p>
             </CardContent>
           </Card>
-          <Card className="border-border/50">
+          <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 Members
@@ -189,7 +186,7 @@ export default function ProjectPage() {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-4">
-            <Card className="border-border/50">
+            <Card>
               <CardHeader>
                 <CardTitle>Project Overview</CardTitle>
                 <CardDescription>
@@ -214,7 +211,7 @@ export default function ProjectPage() {
           </TabsContent>
 
           <TabsContent value="members" className="space-y-4">
-            <Card className="border-border/50">
+            <Card>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
@@ -223,7 +220,7 @@ export default function ProjectPage() {
                       Manage project team members
                     </CardDescription>
                   </div>
-                  <Button size="sm" className="bg-primary hover:bg-primary/90">
+                  <Button size="sm">
                     Add Member
                   </Button>
                 </div>
@@ -234,7 +231,7 @@ export default function ProjectPage() {
                     project.members.map((member) => (
                       <div
                         key={member.id}
-                        className="flex items-center justify-between p-4 rounded-lg bg-secondary/50"
+                        className="flex items-center justify-between p-4 rounded-xl bg-secondary/60"
                       >
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-bold text-sm">
@@ -266,7 +263,7 @@ export default function ProjectPage() {
           </TabsContent>
 
           <TabsContent value="tasks" className="space-y-4">
-            <Card className="border-border/50">
+            <Card>
               <CardHeader>
                 <CardTitle>Project Tasks</CardTitle>
                 <CardDescription>View and manage project tasks</CardDescription>
@@ -278,7 +275,7 @@ export default function ProjectPage() {
           </TabsContent>
 
           <TabsContent value="settings" className="space-y-4">
-            <Card className="border-border/50">
+            <Card>
               <CardHeader>
                 <CardTitle>Project Settings</CardTitle>
                 <CardDescription>Configure project settings</CardDescription>
@@ -291,7 +288,7 @@ export default function ProjectPage() {
                   <input
                     type="text"
                     defaultValue={project.name}
-                    className="w-full mt-2 px-3 py-2 rounded-lg bg-input border border-border/50 text-foreground"
+                    className="w-full mt-2 px-3 py-2 rounded-lg bg-input border text-foreground"
                   />
                 </div>
                 <div>
@@ -300,11 +297,11 @@ export default function ProjectPage() {
                   </label>
                   <textarea
                     defaultValue={project.description}
-                    className="w-full mt-2 px-3 py-2 rounded-lg bg-input border border-border/50 text-foreground"
+                    className="w-full mt-2 px-3 py-2 rounded-lg bg-input border text-foreground"
                     rows={4}
                   />
                 </div>
-                <Button className="bg-primary hover:bg-primary/90">
+                <Button>
                   Save Changes
                 </Button>
               </CardContent>

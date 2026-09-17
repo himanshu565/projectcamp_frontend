@@ -6,6 +6,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/app/components/ui/button";
 import { Input } from "@/app/components/ui/input";
+import { Label } from "@/app/components/ui/label";
 import {
   Card,
   CardContent,
@@ -13,7 +14,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/app/components/ui/card";
-import { AlertCircle } from "lucide-react";
+import { Alert, AlertDescription } from "@/app/components/ui/alert";
+import { AlertCircle, CheckCircle2, Loader2, Lock, Mail, User } from "lucide-react";
 
 interface LoginFormProps {
   onSwitchToRegister: () => void;
@@ -73,78 +75,89 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
   };
 
   return (
-    <Card className="border-border/50 bg-card/50 backdrop-blur">
-      <CardHeader className="space-y-2">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-            <span className="text-primary-foreground font-bold text-sm">
-              PC
-            </span>
-          </div>
-          <CardTitle className="text-2xl">Project Camp</CardTitle>
-        </div>
-        <CardDescription>Sign in to your account</CardDescription>
+    <Card className="shadow-lg">
+      <CardHeader className="space-y-1.5">
+        <CardTitle className="text-2xl">Welcome back</CardTitle>
+        <CardDescription>Sign in to your Project Camp account</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="flex gap-2 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
-              <AlertCircle className="w-4 h-4 text-destructive flex-flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-destructive">{error}</p>
-            </div>
+            <Alert variant="destructive">
+              <AlertCircle />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
           )}
           {success && (
-            <div className="flex gap-2 p-3 rounded-lg bg-green-100 border border-green-300">
-              <p className="text-sm text-green-700 font-medium">{success}</p>
-            </div>
+            <Alert className="border-success/30 bg-success/10 text-success-foreground [&>svg]:text-success">
+              <CheckCircle2 />
+              <AlertDescription className="text-foreground/90">{success}</AlertDescription>
+            </Alert>
           )}
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Email</label>
-            <Input
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              disabled={loading}
-              className="bg-input border-border/50"
-            />
+            <Label htmlFor="email">Email</Label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                id="email"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={loading}
+                className="pl-9"
+              />
+            </div>
           </div>
           <div className="space-y-2">
-            <label className="text-sm font-medium">Username</label>
-            <Input
-              type="text"
-              placeholder="your username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              disabled={loading}
-              className="bg-input border-border/50"
-            />
+            <Label htmlFor="username">Username</Label>
+            <div className="relative">
+              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                id="username"
+                type="text"
+                placeholder="your username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                disabled={loading}
+                className="pl-9"
+              />
+            </div>
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-medium">Password</label>
-            <Input
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={loading}
-              className="bg-input border-border/50"
-            />
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password">Password</Label>
+              <button
+                type="button"
+                className="text-xs text-primary hover:underline font-medium"
+              >
+                Forgot password?
+              </button>
+            </div>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                id="password"
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={loading}
+                className="pl-9"
+              />
+            </div>
           </div>
 
-          <Button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-primary hover:bg-primary/90"
-          >
+          <Button type="submit" disabled={loading} className="w-full rounded-full">
+            {loading && <Loader2 className="animate-spin" />}
             {loading ? "Signing in..." : "Sign in"}
           </Button>
 
           <div className="text-center text-sm">
             <span className="text-muted-foreground">
-              Don't have an account?{" "}
+              Don&apos;t have an account?{" "}
             </span>
             <button
               type="button"

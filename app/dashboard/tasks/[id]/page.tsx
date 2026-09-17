@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { ArrowLeft, Plus, Trash2, CheckCircle2, Circle } from "lucide-react";
 import Link from "next/link";
+import { DashboardLayout } from "@/components/layout/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 
 // Mock data for task details
 const mockTask = {
@@ -49,6 +51,18 @@ const mockTask = {
   ],
 };
 
+const priorityBadgeClass: Record<string, string> = {
+  high: "bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400",
+  medium: "bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400",
+  low: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400",
+};
+
+const statusBadgeClass: Record<string, string> = {
+  "in-progress": "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400",
+  done: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400",
+  todo: "bg-muted text-muted-foreground",
+};
+
 export default function TaskDetailPage({ params }: { params: { id: string } }) {
   const [subtasks, setSubtasks] = useState(mockTask.subtasks);
   const [newSubtask, setNewSubtask] = useState("");
@@ -85,8 +99,8 @@ export default function TaskDetailPage({ params }: { params: { id: string } }) {
     subtasks.length > 0 ? (completedCount / subtasks.length) * 100 : 0;
 
   return (
-    <div className="min-h-screen bg-background p-6">
-      <div className="max-w-4xl mx-auto">
+    <DashboardLayout>
+      <div className="max-w-5xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
           <Link href="/dashboard/tasks">
@@ -94,12 +108,15 @@ export default function TaskDetailPage({ params }: { params: { id: string } }) {
               <ArrowLeft className="w-5 h-5" />
             </Button>
           </Link>
-          <div>
-            <h1 className="text-3xl font-bold text-foreground">
+          <div className="flex-1">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
               {mockTask.title}
             </h1>
-            <p className="text-muted-foreground mt-1">{mockTask.description}</p>
+            <p className="text-muted-foreground mt-1 text-sm">{mockTask.description}</p>
           </div>
+          <Badge className={statusBadgeClass[mockTask.status]}>
+            {mockTask.status.replace("-", " ")}
+          </Badge>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -113,25 +130,25 @@ export default function TaskDetailPage({ params }: { params: { id: string } }) {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-muted-foreground">Status</p>
-                  <p className="text-foreground font-medium capitalize">
-                    {mockTask.status}
+                  <p className="text-foreground font-medium capitalize mt-1">
+                    {mockTask.status.replace("-", " ")}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Priority</p>
-                  <p className="text-foreground font-medium capitalize">
+                  <Badge className={`mt-1 ${priorityBadgeClass[mockTask.priority]}`}>
                     {mockTask.priority}
-                  </p>
+                  </Badge>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Assigned To</p>
-                  <p className="text-foreground font-medium">
+                  <p className="text-foreground font-medium mt-1">
                     {mockTask.assignee.name}
                   </p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Due Date</p>
-                  <p className="text-foreground font-medium">
+                  <p className="text-foreground font-medium mt-1">
                     {mockTask.dueDate}
                   </p>
                 </div>
@@ -168,15 +185,15 @@ export default function TaskDetailPage({ params }: { params: { id: string } }) {
               </div>
 
               {/* Subtasks List */}
-              <div className="space-y-3 mb-6">
+              <div className="space-y-2 mb-6">
                 {subtasks.map((subtask) => (
                   <div
                     key={subtask.id}
-                    className="flex items-center gap-3 p-3 rounded-lg bg-muted hover:bg-muted/80 transition-colors"
+                    className="flex items-center gap-3 p-3 rounded-lg bg-muted/60 hover:bg-muted transition-colors"
                   >
                     <button
                       onClick={() => toggleSubtask(subtask.id)}
-                      className="flex-shrink-0 text-primary hover:text-primary/80 transition-colors"
+                      className="shrink-0 text-primary hover:text-primary/80 transition-colors"
                     >
                       {subtask.completed ? (
                         <CheckCircle2 className="w-5 h-5" />
@@ -200,7 +217,7 @@ export default function TaskDetailPage({ params }: { params: { id: string } }) {
                     </div>
                     <button
                       onClick={() => deleteSubtask(subtask.id)}
-                      className="flex-shrink-0 text-muted-foreground hover:text-destructive transition-colors"
+                      className="shrink-0 text-muted-foreground hover:text-destructive transition-colors"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -217,8 +234,8 @@ export default function TaskDetailPage({ params }: { params: { id: string } }) {
                   onKeyPress={(e) => e.key === "Enter" && addSubtask()}
                   className="flex-1"
                 />
-                <Button onClick={addSubtask} size="sm">
-                  <Plus className="w-4 h-4 mr-2" />
+                <Button onClick={addSubtask} size="sm" className="gap-2">
+                  <Plus className="w-4 h-4" />
                   Add
                 </Button>
               </div>
@@ -246,6 +263,6 @@ export default function TaskDetailPage({ params }: { params: { id: string } }) {
           </div>
         </div>
       </div>
-    </div>
+    </DashboardLayout>
   );
 }
