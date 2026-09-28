@@ -9,7 +9,7 @@ const navItems = [
   { href: "/dashboard", label: "Projects", icon: LayoutGrid },
   { href: "/dashboard/tasks", label: "Tasks", icon: CheckSquare },
   { href: "/dashboard/notes", label: "Notes", icon: FileText },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings },
+  // { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ]
 
 export function Sidebar() {
