@@ -71,7 +71,7 @@ const statusBadgeClass: Record<string, string> = {
 }
 
 export default function TasksPage() {
-  const [tasks, setTasks] = useState(mockTasks)
+  const [tasks, setTasks] = useState<typeof mockTasks>([])
   const [defaultProjectId, setDefaultProjectId] = useState<string | null>(null)
   const [filter, setFilter] = useState("all")
   const [isCreating, setIsCreating] = useState(false)
@@ -85,7 +85,7 @@ export default function TasksPage() {
         if (!projectsResponse.ok) return
         const projectsData = await projectsResponse.json()
         const projects = Array.isArray(projectsData) ? projectsData : projectsData.projects
-        const projectIds = projects?.map((project: { _id?: string; id?: string }) => project._id ?? project.id).filter(Boolean) ?? []
+        const projectIds = projects?.map((project: { _id?: string }) => project._id).filter((projectId: string | undefined): projectId is string => Boolean(projectId)) ?? []
         if (!projectIds.length) return
         setDefaultProjectId(projectIds[0])
         const taskResponses = await Promise.all(projectIds.map((projectId: string) => fetch(`${API_URL}/tasks/${projectId}`, { credentials: "include" })))
@@ -93,11 +93,11 @@ export default function TasksPage() {
           if (!response.ok) return []
           const data = await response.json()
           const loadedTasks = Array.isArray(data) ? data : data.tasks
-          return (loadedTasks ?? []).map((task: Record<string, unknown>) => ({
-            ...task,
-            id: String(task._id ?? task.id),
-            projectId: projectIds[index],
-          }))
+          return (loadedTasks ?? []).map((task: Record<string, unknown>) => {
+            const taskId = task._id
+            if (!taskId) return null
+            return { ...task, id: String(taskId), projectId: projectIds[index] }
+          }).filter(Boolean)
         }))
         const loadedTasks = taskGroups.flat()
         if (loadedTasks.length) setTasks(loadedTasks)
@@ -132,17 +132,15 @@ export default function TasksPage() {
       if (!response.ok) throw new Error("Task creation failed")
       const data = await response.json()
       const createdTask = data.task ?? data
+      const taskId = createdTask._id
+      if (!taskId) throw new Error("Created task did not include an ID")
       setTasks((currentTasks) => [...currentTasks, {
         ...createdTask,
-        id: String(createdTask._id ?? createdTask.id),
+        id: String(taskId),
         projectId: defaultProjectId,
       }])
     } catch {
-      setTasks((currentTasks) => [...currentTasks, {
-        ...taskPayload,
-        id: `local-${Date.now()}`,
-        projectId: defaultProjectId ?? "local",
-      }])
+      return
     }
     setTitle("")
     setDescription("")
@@ -150,6 +148,7 @@ export default function TasksPage() {
   }
 
   const updateTaskStatus = async (taskId: string, projectId: string, status: string) => {
+    if (!taskId || !projectId || taskId.startsWith("local-") || projectId.startsWith("local-")) return
     setTasks((currentTasks) =>
       currentTasks.map((task) => (task.id === taskId ? { ...task, status } : task)),
     )

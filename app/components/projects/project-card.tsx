@@ -14,6 +14,8 @@ interface ProjectCardProps {
 }
 
 export function ProjectCard({ project }: ProjectCardProps) {
+  if (!project.id) return null
+
   return (
     <Link href={`/dashboard/projects/${project.id}`}>
       <Card className="h-full transition-all hover:shadow-md hover:-translate-y-0.5 hover:border-primary/40 cursor-pointer group">

@@ -75,7 +75,7 @@ export default function NotesPage() {
           if (!projectsResponse.ok) return
           const projectsData = await projectsResponse.json()
           const projects = Array.isArray(projectsData) ? projectsData : projectsData.projects
-          resolvedProjectId = projects?.[0]?.id ?? null
+          resolvedProjectId = projects?.[0]?._id ?? null
         }
         if (!resolvedProjectId) return
         setProjectId(resolvedProjectId)

@@ -45,7 +45,7 @@ export default function ProjectPage() {
   const [isAddingMember, setIsAddingMember] = useState(false);
 
   const updateProject = async (changes: Partial<Project>) => {
-    if (!project) return;
+    if (!project || !projectId) return;
     setProject((currentProject) =>
       currentProject ? { ...currentProject, ...changes } : currentProject,
     );
@@ -70,7 +70,7 @@ export default function ProjectPage() {
   };
 
   const addMember = async () => {
-    if (!memberName.trim()) return;
+    if (!projectId || !memberName.trim()) return;
     const member = { id: crypto.randomUUID(), name: memberName.trim(), role: "Member" };
     try {
       await fetch(`${API_URL}/projects/${projectId}/members`, {
@@ -92,6 +92,7 @@ export default function ProjectPage() {
   };
 
   const removeMember = async (memberId: string) => {
+    if (!projectId || !memberId) return;
     try {
       await fetch(`${API_URL}/projects/${projectId}/members/${memberId}`, { method: "DELETE", credentials: "include" });
     } finally {
@@ -121,7 +122,10 @@ export default function ProjectPage() {
 
       if (response.ok) {
         const data = await response.json();
-        setProject(data.project);
+        const loadedProject = data.project ?? data;
+        const loadedProjectId = loadedProject.project?._id ?? loadedProject._id;
+        if (!loadedProjectId) return;
+        setProject({ ...loadedProject, id: loadedProjectId });
       } else {
         // fallback: set a mock project so UI remains usable in dev
         setProject({

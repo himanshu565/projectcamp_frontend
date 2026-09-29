@@ -56,7 +56,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
           if (!projectsResponse.ok) return;
           const projectsData = await projectsResponse.json();
           const projects = Array.isArray(projectsData) ? projectsData : projectsData.projects;
-          resolvedProjectId = projects?.[0]?._id ?? projects?.[0]?.id ?? null;
+          resolvedProjectId = projects?.[0]?._id ?? null;
         }
         if (!resolvedProjectId) return;
         setProjectId(resolvedProjectId);

@@ -37,7 +37,7 @@ const mockProjects = [
 ]
 
 export default function DashboardPage() {
-  const [projects, setProjects] = useState(mockProjects)
+  const [projects, setProjects] = useState<typeof mockProjects>([])
   const [isCreating, setIsCreating] = useState(false)
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
@@ -55,11 +55,15 @@ export default function DashboardPage() {
         const data = await response.json()
         const loadedProjects = Array.isArray(data) ? data : data.projects
         if (!Array.isArray(loadedProjects)) return
-        setProjects(loadedProjects.map((project) => ({
-          ...project,
-          id: project._id ?? project.id,
-          memberCount: project.members?.length ?? project.memberCount ?? 0,
-        })))
+        setProjects(loadedProjects.map((project) => {
+          const projectId = project.project?._id ?? project._id
+          if (!projectId) return null
+          return {
+            ...project,
+            id: projectId,
+            memberCount: project.members?.length ?? project.memberCount ?? 0,
+          }
+        }).filter(Boolean) as typeof mockProjects)
       } catch {
         // Keep the local fallback when the API is unavailable.
       }
@@ -97,19 +101,17 @@ export default function DashboardPage() {
       if (!response.ok) throw new Error("Project creation failed")
       const data = await response.json()
       const createdProject = data.project ?? data
+      const projectId = createdProject.project?._id ?? createdProject._id
+      if (!projectId) throw new Error("Created project did not include an ID")
       setProjects((currentProjects) => [...currentProjects, {
         ...createdProject,
-        id: createdProject._id ?? createdProject.id,
+        id: projectId,
         name: createdProject.name ?? projectPayload.name,
         description: createdProject.description ?? projectPayload.description,
         memberCount: createdProject.members?.length ?? members.length,
       }])
     } catch {
-      setProjects((currentProjects) => [...currentProjects, {
-        ...projectPayload,
-        id: `local-${Date.now()}`,
-        memberCount: members.length,
-      }])
+      return
     }
     setName("")
     setDescription("")
