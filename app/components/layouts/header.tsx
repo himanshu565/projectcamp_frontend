@@ -1,22 +1,38 @@
 "use client"
 
-import { useState } from "react"
-import { Bell, LogOut, Search, Settings, User } from "lucide-react"
+import { useEffect, useState } from "react"
+import { Bell, LogOut, Search } from "lucide-react"
 import { Button } from "@/app/components/ui/button"
 import { Input } from "@/app/components/ui/input"
 import { ThemeToggle } from "@/app/components/ui/theme-toggle"
 import { Avatar, AvatarFallback } from "@/app/components/ui/avatar"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/app/components/ui/dropdown-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/app/components/ui/dropdown-menu"
+import { API_URL, getApiEntity } from "@/lib/api"
+
+type CurrentUser = {
+  username?: string
+  email?: string
+  role?: string
+}
 
 export function Header() {
   const [showNotifications, setShowNotifications] = useState(false)
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
+
+  useEffect(() => {
+    const loadCurrentUser = async () => {
+      try {
+        const response = await fetch(`${API_URL}/auth/current-user`, { credentials: "include" })
+        if (!response.ok) return
+        const data = await response.json()
+        setCurrentUser(getApiEntity<CurrentUser>(data, "user"))
+      } catch {
+        setCurrentUser(null)
+      }
+    }
+
+    loadCurrentUser()
+  }, [])
 
   const handleLogout = () => {
     localStorage.removeItem("token")
@@ -68,16 +84,10 @@ export function Header() {
             <DropdownMenuLabel className="font-normal">
               <p className="text-sm font-medium leading-none">My Account</p>
               <p className="text-xs text-muted-foreground mt-1">Signed in</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Role: {currentUser?.role ?? "Unknown"}
+              </p>
             </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <User className="w-4 h-4" />
-              Profile
-            </DropdownMenuItem>
-            <DropdownMenuItem>
-              <Settings className="w-4 h-4" />
-              Settings
-            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={handleLogout}

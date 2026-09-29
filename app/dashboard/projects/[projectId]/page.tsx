@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { DashboardLayout } from "@/app/components/layouts/dashboard-layout";
 import { TaskList } from "@/app/components/task/task-list";
 import { Button } from "@/app/components/ui/button";
@@ -13,8 +13,20 @@ import {
   CardTitle,
 } from "@/app/components/ui/card";
 import { Input } from "@/app/components/ui/input";
-import { API_URL } from "@/lib/api";
+import { API_URL, getApiCollection, getApiEntity, getPersistedId, normalizeProject } from "@/lib/api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/app/components/ui/alert-dialog";
+import { Trash2 } from "lucide-react";
 
 interface Project {
   id: string;
@@ -35,29 +47,49 @@ interface Task {
 }
 
 export default function ProjectPage() {
-  const params = useParams();
-  const projectId = (params as any).projectId as string;
+  const params = useParams<{ projectId?: string | string[] }>();
+  const router = useRouter();
+  const projectParam = params.projectId;
+  const projectId = Array.isArray(projectParam) ? projectParam[0] : projectParam;
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
-  const [memberName, setMemberName] = useState("");
+  const [memberEmail, setMemberEmail] = useState("");
   const [isAddingMember, setIsAddingMember] = useState(false);
+  const [projectError, setProjectError] = useState("");
+
+  const deleteProject = async () => {
+    if (!projectId) return;
+    setProjectError("");
+    try {
+      const response = await fetch(`${API_URL}/projects/${projectId}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.message || "Project deletion failed");
+      router.push("/dashboard");
+    } catch (error) {
+      setProjectError(error instanceof Error ? error.message : "Project deletion failed");
+    }
+  };
 
   const updateProject = async (changes: Partial<Project>) => {
     if (!project || !projectId) return;
-    setProject((currentProject) =>
-      currentProject ? { ...currentProject, ...changes } : currentProject,
-    );
     try {
-      await fetch(`${API_URL}/projects/${projectId}`, {
+      const response = await fetch(`${API_URL}/projects/${projectId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(changes),
         credentials: "include",
       });
-    } catch {
-      // Keep the optimistic update when the API is unavailable.
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.message || "Project update failed");
+      const updatedProject = normalizeProject(getApiEntity<Record<string, unknown>>(data, "project"));
+      if (updatedProject) setProject(updatedProject as unknown as Project);
+    } catch (error) {
+      console.error("Failed to update project:", error);
     }
   };
 
@@ -70,46 +102,48 @@ export default function ProjectPage() {
   };
 
   const addMember = async () => {
-    if (!projectId || !memberName.trim()) return;
-    const member = { id: crypto.randomUUID(), name: memberName.trim(), role: "Member" };
+    if (!projectId || !memberEmail.trim()) return;
     try {
-      await fetch(`${API_URL}/projects/${projectId}/members`, {
+      const response = await fetch(`${API_URL}/projects/${projectId}/members`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: member.name }),
+        body: JSON.stringify({ email: memberEmail.trim(), role: "member" }),
         credentials: "include",
       });
-    } catch {
-      // Keep the optimistic update when the API is unavailable.
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.message || "Member creation failed");
+      const member = getApiEntity<Record<string, unknown>>(data, "member");
+      const memberId = getPersistedId(member);
+      if (!memberId) throw new Error("Created member did not include an ID");
+      const memberName = typeof member.name === "string"
+        ? member.name
+        : typeof member.email === "string" ? member.email : "Unnamed member";
+      const memberRole = typeof member.role === "string" ? member.role : "member";
+      setProject((currentProject) => currentProject
+        ? { ...currentProject, members: [...(currentProject.members ?? []), { id: memberId, name: memberName, role: memberRole }] }
+        : currentProject);
+      setMemberEmail("");
+      setIsAddingMember(false);
+    } catch (error) {
+      console.error("Failed to add member:", error);
     }
-    setProject((currentProject) =>
-      currentProject
-        ? { ...currentProject, members: [...(currentProject.members ?? []), member] }
-        : currentProject,
-    );
-    setMemberName("");
-    setIsAddingMember(false);
   };
 
   const removeMember = async (memberId: string) => {
     if (!projectId || !memberId) return;
     try {
-      await fetch(`${API_URL}/projects/${projectId}/members/${memberId}`, { method: "DELETE", credentials: "include" });
-    } finally {
+      const response = await fetch(`${API_URL}/projects/${projectId}/members/${memberId}`, { method: "DELETE", credentials: "include" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.message || "Member deletion failed");
       setProject((currentProject) =>
         currentProject
           ? { ...currentProject, members: currentProject.members?.filter((member) => member.id !== memberId) }
           : currentProject,
       );
+    } catch (error) {
+      console.error("Failed to remove member:", error);
     }
   };
-
-  useEffect(() => {
-    if (!projectId) return;
-    fetchProject();
-    fetchTasks();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [projectId]);
 
   const fetchProject = async () => {
     try {
@@ -122,33 +156,12 @@ export default function ProjectPage() {
 
       if (response.ok) {
         const data = await response.json();
-        const loadedProject = data.project ?? data;
-        const loadedProjectId = loadedProject.project?._id ?? loadedProject._id;
-        if (!loadedProjectId) return;
-        setProject({ ...loadedProject, id: loadedProjectId });
-      } else {
-        // fallback: set a mock project so UI remains usable in dev
-        setProject({
-          id: projectId,
-          name: `Project ${projectId}`,
-          description: "Description not available",
-          status: "Unknown",
-          startDate: "-",
-          endDate: "-",
-          members: [],
-        });
+        const loadedProject = getApiEntity<Project & { _id?: string; project?: { _id?: string } }>(data, "project");
+        const normalizedProject = normalizeProject(loadedProject as unknown as Record<string, unknown>);
+        if (normalizedProject) setProject(normalizedProject as unknown as Project);
       }
     } catch (err) {
       console.error("Failed to fetch project:", err);
-      setProject({
-        id: projectId,
-        name: `Project ${projectId}`,
-        description: "Description not available",
-        status: "Unknown",
-        startDate: "-",
-        endDate: "-",
-        members: [],
-      });
     }
   };
 
@@ -163,7 +176,7 @@ export default function ProjectPage() {
 
       if (response.ok) {
         const data = await response.json();
-        setTasks(data.tasks || []);
+        setTasks(getApiCollection<Task>(data, "tasks"));
       } else {
         setTasks([]);
       }
@@ -174,6 +187,12 @@ export default function ProjectPage() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!projectId) return;
+    fetchProject();
+    fetchTasks();
+  }, [projectId]);
 
   if (!project) {
     return (
@@ -210,6 +229,26 @@ export default function ProjectPage() {
               <option value="On Hold">On Hold</option>
             </select>
             <Button onClick={() => setActiveTab("settings")}>Edit Project</Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button variant="destructive" size="icon" aria-label="Delete project">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete {project.name}?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    This permanently deletes the project and its associated data. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                {projectError && <p role="alert" className="text-sm text-destructive">{projectError}</p>}
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={(event) => { event.preventDefault(); void deleteProject(); }}>Delete project</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
         </div>
 
@@ -315,7 +354,7 @@ export default function ProjectPage() {
               <CardContent>
                 {isAddingMember && (
                   <div className="mb-4 flex gap-2">
-                    <Input value={memberName} onChange={(event) => setMemberName(event.target.value)} placeholder="Member name" />
+                    <Input value={memberEmail} onChange={(event) => setMemberEmail(event.target.value)} placeholder="Member email" type="email" />
                     <Button onClick={addMember}>Add</Button>
                   </div>
                 )}

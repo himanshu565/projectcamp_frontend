@@ -6,57 +6,23 @@ import { Button } from "@/app/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card"
 import { Input } from "@/app/components/ui/input"
 import { Textarea } from "@/app/components/ui/textarea"
-import { API_URL } from "@/lib/api"
+import { API_URL, getApiCollection, getPersistedId } from "@/lib/api"
 import { Plus, Search, Trash2, Edit2 } from "lucide-react"
 
-const mockNotes = [
-  {
-    id: "1",
-    title: "Design System Guidelines",
-    content: "Document the design system including colors, typography, and component patterns",
-    category: "Design",
-    createdAt: "2024-02-10",
-    updatedAt: "2024-02-12",
-  },
-  {
-    id: "2",
-    title: "API Endpoints List",
-    content: "Complete list of all API endpoints with their parameters and response formats",
-    category: "Development",
-    createdAt: "2024-02-08",
-    updatedAt: "2024-02-11",
-  },
-  {
-    id: "3",
-    title: "Meeting Notes - Feb 10",
-    content: "Discussion about project timeline, deliverables, and team responsibilities",
-    category: "Meeting",
-    createdAt: "2024-02-10",
-    updatedAt: "2024-02-10",
-  },
-  {
-    id: "4",
-    title: "Database Schema",
-    content: "Database structure including tables, relationships, and indexes",
-    category: "Development",
-    createdAt: "2024-02-05",
-    updatedAt: "2024-02-09",
-  },
-  {
-    id: "5",
-    title: "User Feedback Summary",
-    content: "Compiled feedback from user testing sessions and feature requests",
-    category: "Feedback",
-    createdAt: "2024-02-07",
-    updatedAt: "2024-02-12",
-  },
-]
+type Note = {
+  id: string
+  title: string
+  content: string
+  category: string
+  createdAt?: string
+  updatedAt?: string
+}
 
 const categories = ["All", "Design", "Development", "Meeting", "Feedback"]
 
 export default function NotesPage() {
   const [projectId, setProjectId] = useState<string | null>(null)
-  const [notes, setNotes] = useState(mockNotes)
+  const [notes, setNotes] = useState<Note[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("All")
   const [isCreating, setIsCreating] = useState(false)
@@ -74,7 +40,7 @@ export default function NotesPage() {
           const projectsResponse = await fetch(`${API_URL}/projects`, { credentials: "include" })
           if (!projectsResponse.ok) return
           const projectsData = await projectsResponse.json()
-          const projects = Array.isArray(projectsData) ? projectsData : projectsData.projects
+          const projects = getApiCollection<{ _id?: string }>(projectsData, "projects")
           resolvedProjectId = projects?.[0]?._id ?? null
         }
         if (!resolvedProjectId) return
@@ -83,10 +49,20 @@ export default function NotesPage() {
         const response = await fetch(`${API_URL}/notes/${resolvedProjectId}`, { credentials: "include" })
         if (!response.ok) return
         const data = await response.json()
-        const loadedNotes = Array.isArray(data) ? data : data.notes
-        if (Array.isArray(loadedNotes)) setNotes(loadedNotes)
+        const loadedNotes = getApiCollection<Record<string, unknown>>(data, "notes")
+        setNotes(loadedNotes.map((note) => {
+          const id = getPersistedId(note)
+          if (!id) return null
+          return {
+            ...note,
+            id,
+            title: String(note.title ?? "Untitled note"),
+            content: String(note.content ?? ""),
+            category: String(note.category ?? "General"),
+          }
+        }).filter(Boolean) as Note[])
       } catch {
-        // Keep the local fallback when the API is unavailable.
+        setNotes([])
       }
     }
 
@@ -101,7 +77,7 @@ export default function NotesPage() {
     setNoteCategory("Design")
   }
 
-  const startEditing = (note: (typeof mockNotes)[number]) => {
+  const startEditing = (note: Note) => {
     setEditingNoteId(note.id)
     setNoteTitle(note.title)
     setNoteContent(note.content)
@@ -113,11 +89,9 @@ export default function NotesPage() {
     event.preventDefault()
     if (!noteTitle.trim() || !noteContent.trim()) return
 
-    const note = {
-      title: noteTitle.trim(),
-      content: noteContent.trim(),
-      category: noteCategory,
-    }
+    if (editingNoteId && !projectId) return
+    if (editingNoteId && editingNoteId.startsWith("local-")) return
+    const notePayload = { content: noteContent.trim() }
     const endpoint = editingNoteId && projectId
       ? `${API_URL}/notes/${projectId}/n/${editingNoteId}`
       : projectId
@@ -129,42 +103,39 @@ export default function NotesPage() {
       const response = await fetch(endpoint, {
         method: editingNoteId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(note),
+        body: JSON.stringify(notePayload),
         credentials: "include",
       })
-      if (!response.ok) throw new Error("Note request failed")
-    } catch {
-      // The local update keeps the interaction usable while the API is offline.
-    }
-
-    setNotes((currentNotes) => {
-      if (editingNoteId) {
-        return currentNotes.map((currentNote) =>
-          currentNote.id === editingNoteId
-            ? { ...currentNote, ...note, updatedAt: new Date().toISOString().slice(0, 10) }
-            : currentNote,
-        )
+      const data = await response.json()
+      if (!response.ok) throw new Error(data?.message || "Note request failed")
+      const returnedNote = (data?.note ?? data?.data?.note ?? data?.data ?? data) as Record<string, unknown>
+      const noteId = getPersistedId(returnedNote)
+      if (!noteId) throw new Error("Saved note did not include an ID")
+      const savedNote: Note = {
+        ...returnedNote,
+        id: noteId,
+        title: String(returnedNote.title ?? noteTitle.trim()),
+        content: String(returnedNote.content ?? notePayload.content),
+        category: String(returnedNote.category ?? noteCategory),
       }
-      return [
-        ...currentNotes,
-        {
-          id: crypto.randomUUID(),
-          ...note,
-          createdAt: new Date().toISOString().slice(0, 10),
-          updatedAt: new Date().toISOString().slice(0, 10),
-        },
-      ]
-    })
-    resetNoteForm()
+      setNotes((currentNotes) => editingNoteId
+        ? currentNotes.map((currentNote) => currentNote.id === editingNoteId ? savedNote : currentNote)
+        : [...currentNotes, savedNote])
+      resetNoteForm()
+    } catch (error) {
+      console.error("Failed to save note:", error)
+    }
   }
 
   const deleteNote = async (noteId: string) => {
+    if (!projectId || !noteId || noteId.startsWith("local-")) return
     try {
-      if (projectId) {
-        await fetch(`${API_URL}/notes/${projectId}/n/${noteId}`, { method: "DELETE", credentials: "include" })
-      }
-    } finally {
+      const response = await fetch(`${API_URL}/notes/${projectId}/n/${noteId}`, { method: "DELETE", credentials: "include" })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data?.message || "Note deletion failed")
       setNotes((currentNotes) => currentNotes.filter((note) => note.id !== noteId))
+    } catch (error) {
+      console.error("Failed to delete note:", error)
     }
   }
 
@@ -269,7 +240,7 @@ export default function NotesPage() {
               <CardContent className="space-y-4">
                 <p className="text-sm text-muted-foreground line-clamp-3">{note.content}</p>
                 <div className="flex items-center justify-between text-xs text-muted-foreground pt-3 border-t">
-                  <span>Updated {note.updatedAt}</span>
+                  <span>Updated {note.updatedAt ?? "-"}</span>
                   <Button variant="ghost" size="icon-sm" className="h-6 w-6 hover:text-destructive" onClick={() => deleteNote(note.id)} aria-label={`Delete ${note.title}`}>
                     <Trash2 className="w-4 h-4" />
                   </Button>

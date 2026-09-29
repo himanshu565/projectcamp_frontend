@@ -8,23 +8,18 @@ import { Button } from "@/app/components/ui/button";
 import { Card } from "@/app/components/ui/card";
 import { Input } from "@/app/components/ui/input";
 import { Badge } from "@/app/components/ui/badge";
-import { API_URL } from "@/lib/api";
+import { API_URL, getApiCollection, getApiEntity } from "@/lib/api";
 
-const mockTask = {
-  id: "1",
-  title: "Design new landing page",
-  description: "Create a modern, responsive landing page for the new product launch",
-  status: "in-progress",
-  priority: "high",
-  assignee: { name: "Sarah Chen", avatar: "/diverse-avatars.png" },
-  dueDate: "2024-12-15",
-  createdAt: "2024-11-01",
-  subtasks: [
-    { id: "s1", title: "Create wireframes", completed: true, assignee: "Sarah Chen" },
-    { id: "s2", title: "Design mockups in Figma", completed: true, assignee: "Sarah Chen" },
-    { id: "s3", title: "Get stakeholder feedback", completed: false, assignee: "John Doe" },
-    { id: "s4", title: "Finalize design system", completed: false, assignee: "Sarah Chen" },
-  ],
+const emptyTask = {
+  id: "",
+  title: "",
+  description: "",
+  status: "todo",
+  priority: "",
+  assignee: { name: "Unassigned", avatar: "" },
+  dueDate: "",
+  createdAt: "",
+  subtasks: [] as { id: string; title: string; completed: boolean; assignee: string }[],
 };
 
 const priorityBadgeClass: Record<string, string> = {
@@ -39,13 +34,25 @@ const statusBadgeClass: Record<string, string> = {
   todo: "bg-muted text-muted-foreground",
 };
 
+const statusToApi: Record<string, string> = {
+  todo: "todo",
+  "in-progress": "in_progress",
+  done: "done",
+};
+
+const statusToUi = (status: unknown) => {
+  if (status === "todo") return "todo";
+  if (status === "in_progress" || status === "in-progress") return "in-progress";
+  return "done";
+};
+
 export default function TaskDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: taskId } = use(params);
   const [projectId, setProjectId] = useState<string | null>(null);
-  const [task, setTask] = useState(mockTask);
-  const [subtasks, setSubtasks] = useState(mockTask.subtasks);
+  const [task, setTask] = useState(emptyTask);
+  const [subtasks, setSubtasks] = useState(emptyTask.subtasks);
   const [newSubtask, setNewSubtask] = useState("");
-  const [status, setStatus] = useState(mockTask.status);
+  const [status, setStatus] = useState(emptyTask.status);
 
   useEffect(() => {
     const loadTask = async () => {
@@ -55,7 +62,7 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
           const projectsResponse = await fetch(`${API_URL}/projects`, { credentials: "include" });
           if (!projectsResponse.ok) return;
           const projectsData = await projectsResponse.json();
-          const projects = Array.isArray(projectsData) ? projectsData : projectsData.projects;
+          const projects = getApiCollection<{ _id?: string }>(projectsData, "projects");
           resolvedProjectId = projects?.[0]?._id ?? null;
         }
         if (!resolvedProjectId) return;
@@ -63,13 +70,22 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
         const response = await fetch(`${API_URL}/tasks/${resolvedProjectId}/t/${taskId}`, { credentials: "include" });
         if (!response.ok) return;
         const data = await response.json();
-        const loadedTask = data.task || data;
-        if (!loadedTask?.id) return;
+        const taskRecord = getApiEntity<Record<string, unknown>>(data, "task");
+        if (!taskRecord?._id) return;
+        const loadedTask = {
+          ...emptyTask,
+          ...taskRecord,
+          id: String(taskRecord._id),
+          assignee: typeof taskRecord.assignee === "object" && taskRecord.assignee !== null
+            ? { name: String((taskRecord.assignee as Record<string, unknown>).name ?? "Unassigned"), avatar: String((taskRecord.assignee as Record<string, unknown>).avatar ?? "") }
+            : emptyTask.assignee,
+          subtasks: Array.isArray(taskRecord.subtasks) ? taskRecord.subtasks as typeof emptyTask.subtasks : emptyTask.subtasks,
+        };
         setTask(loadedTask);
-        setStatus(loadedTask.status || mockTask.status);
-        setSubtasks(loadedTask.subtasks || []);
-      } catch {
-        // Keep the local fallback when the API is unavailable.
+        setStatus(statusToUi(taskRecord.status));
+        setSubtasks(loadedTask.subtasks);
+      } catch (error) {
+        console.error("Failed to fetch task:", error);
       }
     };
 
@@ -77,17 +93,21 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   }, [taskId]);
 
   const updateTaskStatus = async (nextStatus: string) => {
-    setStatus(nextStatus);
+    if (!projectId || !taskId) return;
+    const previousStatus = status;
     try {
-      if (!projectId) return;
-      await fetch(`${API_URL}/tasks/${projectId}/t/${taskId}`, {
+      const response = await fetch(`${API_URL}/tasks/${projectId}/t/${taskId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: nextStatus }),
+        body: JSON.stringify({ status: statusToApi[nextStatus] ?? nextStatus }),
         credentials: "include",
       });
-    } catch {
-      // Keep the optimistic update when the API is unavailable.
+      const data = await response.json();
+      if (!response.ok) throw new Error(data?.message || "Task status update failed");
+      setStatus(nextStatus);
+    } catch (error) {
+      setStatus(previousStatus);
+      console.error("Failed to update task:", error);
     }
   };
 

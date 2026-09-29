@@ -5,39 +5,13 @@ import { DashboardLayout } from "@/app/components/layouts/dashboard-layout"
 import { ProjectCard } from "@/app/components/projects/project-card"
 import { Button } from "@/app/components/ui/button"
 import { Input } from "@/app/components/ui/input"
-import { API_URL } from "@/lib/api"
+import { API_URL, getApiCollection, getApiEntity, normalizeProject } from "@/lib/api"
 import { Plus, X } from "lucide-react"
 
-// Mock data - will be replaced with API calls
-const mockProjects = [
-  {
-    id: "1",
-    name: "Website Redesign",
-    description: "Complete redesign of the company website with modern UI/UX",
-    memberCount: 5,
-  },
-  {
-    id: "2",
-    name: "Mobile App Development",
-    description: "Building a cross-platform mobile application",
-    memberCount: 8,
-  },
-  {
-    id: "3",
-    name: "API Integration",
-    description: "Integrating third-party APIs into our platform",
-    memberCount: 3,
-  },
-  {
-    id: "4",
-    name: "Database Migration",
-    description: "Migrating from legacy database to modern cloud solution",
-    memberCount: 4,
-  },
-]
+type Project = Record<string, unknown> & { id: string; name: string; description: string; memberCount: number; members?: unknown[] }
 
 export default function DashboardPage() {
-  const [projects, setProjects] = useState<typeof mockProjects>([])
+  const [projects, setProjects] = useState<Project[]>([])
   const [isCreating, setIsCreating] = useState(false)
   const [name, setName] = useState("")
   const [description, setDescription] = useState("")
@@ -46,6 +20,7 @@ export default function DashboardPage() {
   const [status, setStatus] = useState("Planning")
   const [members, setMembers] = useState<string[]>([])
   const [memberName, setMemberName] = useState("")
+  const [projectError, setProjectError] = useState("")
 
   useEffect(() => {
     const loadProjects = async () => {
@@ -53,19 +28,15 @@ export default function DashboardPage() {
         const response = await fetch(`${API_URL}/projects`, { credentials: "include" })
         if (!response.ok) return
         const data = await response.json()
-        const loadedProjects = Array.isArray(data) ? data : data.projects
+        const loadedProjects = getApiCollection<Record<string, unknown>>(data, "projects")
         if (!Array.isArray(loadedProjects)) return
-        setProjects(loadedProjects.map((project) => {
-          const projectId = project.project?._id ?? project._id
-          if (!projectId) return null
-          return {
-            ...project,
-            id: projectId,
-            memberCount: project.members?.length ?? project.memberCount ?? 0,
-          }
-        }).filter(Boolean) as typeof mockProjects)
+        const normalizedProjects = loadedProjects.map(normalizeProject).filter((project): project is NonNullable<typeof project> => project !== null)
+        setProjects(normalizedProjects.map((project) => ({
+          ...project,
+          memberCount: Array.isArray(project.members) ? project.members.length : project.memberCount ?? 0,
+        })) as Project[])
       } catch {
-        // Keep the local fallback when the API is unavailable.
+        setProjects([])
       }
     }
 
@@ -82,14 +53,17 @@ export default function DashboardPage() {
   const handleCreateProject = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!name.trim()) return
+    setProjectError("")
+
+    const normalizedName = name.trim().toLowerCase()
+    if (projects.some((project) => project.name.trim().toLowerCase() === normalizedName)) {
+      setProjectError("A project with this name already exists. Choose a different name.")
+      return
+    }
 
     const projectPayload = {
       name: name.trim(),
-      description: description.trim() || "No description yet",
-      startDate,
-      endDate,
-      status,
-      members,
+      description: description.trim(),
     }
     try {
       const response = await fetch(`${API_URL}/projects`, {
@@ -98,19 +72,29 @@ export default function DashboardPage() {
         body: JSON.stringify(projectPayload),
         credentials: "include",
       })
-      if (!response.ok) throw new Error("Project creation failed")
       const data = await response.json()
-      const createdProject = data.project ?? data
-      const projectId = createdProject.project?._id ?? createdProject._id
+      if (!response.ok) {
+        setProjectError(
+          data.message ??
+            (response.status === 409
+              ? "A project with this name already exists."
+              : "Project creation failed. Please try again."),
+        )
+        return
+      }
+      const createdProject = getApiEntity<Record<string, unknown>>(data, "project")
+      const normalizedProject = normalizeProject(createdProject)
+      const projectId = normalizedProject?.id
       if (!projectId) throw new Error("Created project did not include an ID")
       setProjects((currentProjects) => [...currentProjects, {
-        ...createdProject,
+        ...normalizedProject,
         id: projectId,
-        name: createdProject.name ?? projectPayload.name,
-        description: createdProject.description ?? projectPayload.description,
-        memberCount: createdProject.members?.length ?? members.length,
+        name: typeof createdProject.name === "string" ? createdProject.name : projectPayload.name,
+        description: typeof createdProject.description === "string" ? createdProject.description : projectPayload.description,
+        memberCount: Array.isArray(createdProject.members) ? createdProject.members.length : 0,
       }])
     } catch {
+      setProjectError("Could not reach the project service. Please try again.")
       return
     }
     setName("")
@@ -131,7 +115,7 @@ export default function DashboardPage() {
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">Projects</h1>
             <p className="text-muted-foreground mt-1 text-sm">Manage and organize your projects</p>
           </div>
-          <Button className="gap-2" onClick={() => setIsCreating(true)}>
+          <Button className="gap-2" onClick={() => { setProjectError(""); setIsCreating(true) }}>
             <Plus className="w-4 h-4" />
             New Project
           </Button>
@@ -145,6 +129,7 @@ export default function DashboardPage() {
                 <X className="w-4 h-4" />
               </Button>
             </div>
+            {projectError && <p role="alert" className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">{projectError}</p>}
             <Input value={name} onChange={(event) => setName(event.target.value)} placeholder="Project name" required autoFocus />
             <textarea value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Description (optional)" rows={4} className="min-h-24 w-full rounded-md border bg-transparent px-3 py-2 text-sm" />
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

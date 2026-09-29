@@ -7,14 +7,17 @@ import { ArrowRight, Users } from "lucide-react"
 interface ProjectCardProps {
   project: {
     id: string
-    name: string
-    description: string
-    memberCount: number
+    name?: string
+    description?: string
+    memberCount?: number
   }
 }
 
 export function ProjectCard({ project }: ProjectCardProps) {
   if (!project.id) return null
+
+  const projectName = project.name || "Untitled project"
+  const projectDescription = project.description || "No description available"
 
   return (
     <Link href={`/dashboard/projects/${project.id}`}>
@@ -22,17 +25,17 @@ export function ProjectCard({ project }: ProjectCardProps) {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm">
-              {project.name.slice(0, 2).toUpperCase()}
+              {projectName.slice(0, 2).toUpperCase()}
             </div>
             <ArrowRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all" />
           </div>
-          <CardTitle className="group-hover:text-primary transition-colors pt-2">{project.name}</CardTitle>
-          <CardDescription className="line-clamp-2">{project.description}</CardDescription>
+          <CardTitle className="group-hover:text-primary transition-colors pt-2">{projectName}</CardTitle>
+          <CardDescription className="line-clamp-2">{projectDescription}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-2 text-sm text-muted-foreground pt-2 border-t">
             <Users className="w-4 h-4" />
-            <span>{project.memberCount} members</span>
+            <span>{project.memberCount ?? 0} members</span>
           </div>
         </CardContent>
       </Card>
