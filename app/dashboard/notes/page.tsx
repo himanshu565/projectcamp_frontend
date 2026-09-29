@@ -1,10 +1,10 @@
 "use client"
 
-import { useState } from "react"
-import { DashboardLayout } from "@/components/layout/dashboard-layout"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
+import { useEffect, useState } from "react"
+import { DashboardLayout } from "@/app/components/layouts/dashboard-layout"
+import { Button } from "@/app/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card"
+import { Input } from "@/app/components/ui/input"
 import { Plus, Search, Trash2, Edit2 } from "lucide-react"
 
 const mockNotes = [
@@ -53,9 +53,100 @@ const mockNotes = [
 const categories = ["All", "Design", "Development", "Meeting", "Feedback"]
 
 export default function NotesPage() {
-  const [notes] = useState(mockNotes)
+  const projectId = "1"
+  const [notes, setNotes] = useState(mockNotes)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("All")
+  const [isCreating, setIsCreating] = useState(false)
+  const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
+  const [noteTitle, setNoteTitle] = useState("")
+  const [noteContent, setNoteContent] = useState("")
+  const [noteCategory, setNoteCategory] = useState("Design")
+
+  useEffect(() => {
+    const loadNotes = async () => {
+      try {
+        const response = await fetch(`/api/v1/notes/${projectId}`)
+        if (!response.ok) return
+        const data = await response.json()
+        const loadedNotes = Array.isArray(data) ? data : data.notes
+        if (Array.isArray(loadedNotes)) setNotes(loadedNotes)
+      } catch {
+        // Keep the local fallback when the API is unavailable.
+      }
+    }
+
+    loadNotes()
+  }, [])
+
+  const resetNoteForm = () => {
+    setIsCreating(false)
+    setEditingNoteId(null)
+    setNoteTitle("")
+    setNoteContent("")
+    setNoteCategory("Design")
+  }
+
+  const startEditing = (note: (typeof mockNotes)[number]) => {
+    setEditingNoteId(note.id)
+    setNoteTitle(note.title)
+    setNoteContent(note.content)
+    setNoteCategory(note.category)
+    setIsCreating(true)
+  }
+
+  const saveNote = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!noteTitle.trim() || !noteContent.trim()) return
+
+    const note = {
+      title: noteTitle.trim(),
+      content: noteContent.trim(),
+      category: noteCategory,
+    }
+    const endpoint = editingNoteId
+      ? `/api/v1/notes/${projectId}/n/${editingNoteId}`
+      : `/api/v1/notes/${projectId}`
+
+    try {
+      const response = await fetch(endpoint, {
+        method: editingNoteId ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(note),
+      })
+      if (!response.ok) throw new Error("Note request failed")
+    } catch {
+      // The local update keeps the interaction usable while the API is offline.
+    }
+
+    setNotes((currentNotes) => {
+      if (editingNoteId) {
+        return currentNotes.map((currentNote) =>
+          currentNote.id === editingNoteId
+            ? { ...currentNote, ...note, updatedAt: new Date().toISOString().slice(0, 10) }
+            : currentNote,
+        )
+      }
+      return [
+        ...currentNotes,
+        {
+          id: crypto.randomUUID(),
+          ...note,
+          createdAt: new Date().toISOString().slice(0, 10),
+          updatedAt: new Date().toISOString().slice(0, 10),
+        },
+      ]
+    })
+    resetNoteForm()
+  }
+
+  const deleteNote = async (noteId: string) => {
+    try {
+      await fetch(`/api/v1/notes/${projectId}/n/${noteId}`, { method: "DELETE" })
+    } finally {
+      setNotes((currentNotes) => currentNotes.filter((note) => note.id !== noteId))
+    }
+  }
 
   const filteredNotes = notes.filter((note) => {
     const matchesSearch =
@@ -81,11 +172,26 @@ export default function NotesPage() {
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">Notes</h1>
             <p className="text-muted-foreground mt-1 text-sm">Create and organize project notes</p>
           </div>
-          <Button className="gap-2">
+          <Button className="gap-2" onClick={() => setIsCreating(true)}>
             <Plus className="w-4 h-4" />
             New Note
           </Button>
         </div>
+
+        {isCreating && (
+          <form onSubmit={saveNote} className="rounded-xl border bg-card p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold">{editingNoteId ? "Edit note" : "Create note"}</h2>
+              <Button type="button" variant="outline" onClick={resetNoteForm}>Cancel</Button>
+            </div>
+            <Input value={noteTitle} onChange={(event) => setNoteTitle(event.target.value)} placeholder="Note title" required autoFocus />
+            <Input value={noteContent} onChange={(event) => setNoteContent(event.target.value)} placeholder="Note content" required />
+            <select value={noteCategory} onChange={(event) => setNoteCategory(event.target.value)} className="h-9 rounded-md border bg-background px-3 text-sm">
+              {categories.slice(1).map((category) => <option key={category}>{category}</option>)}
+            </select>
+            <Button type="submit">{editingNoteId ? "Save note" : "Create note"}</Button>
+          </form>
+        )}
 
         <Card>
           <CardHeader>
@@ -135,7 +241,7 @@ export default function NotesPage() {
                       {note.category}
                     </span>
                   </div>
-                  <Button variant="ghost" size="icon-sm" className="opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button variant="ghost" size="icon-sm" className="opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => startEditing(note)} aria-label={`Edit ${note.title}`}>
                     <Edit2 className="w-4 h-4" />
                   </Button>
                 </div>
@@ -144,7 +250,7 @@ export default function NotesPage() {
                 <p className="text-sm text-muted-foreground line-clamp-3">{note.content}</p>
                 <div className="flex items-center justify-between text-xs text-muted-foreground pt-3 border-t">
                   <span>Updated {note.updatedAt}</span>
-                  <Button variant="ghost" size="icon-sm" className="h-6 w-6 hover:text-destructive">
+                  <Button variant="ghost" size="icon-sm" className="h-6 w-6 hover:text-destructive" onClick={() => deleteNote(note.id)} aria-label={`Delete ${note.title}`}>
                     <Trash2 className="w-4 h-4" />
                   </Button>
                 </div>

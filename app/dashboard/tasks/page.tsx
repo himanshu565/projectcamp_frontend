@@ -1,12 +1,13 @@
 "use client"
 
 import { useState } from "react"
-import { DashboardLayout } from "@/components/layout/dashboard-layout"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Plus, Filter } from "lucide-react"
+import { DashboardLayout } from "@/app/components/layouts/dashboard-layout"
+import { Button } from "@/app/components/ui/button"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/components/ui/card"
+import { Badge } from "@/app/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs"
+import { Input } from "@/app/components/ui/input"
+import { Plus, Filter, X } from "lucide-react"
 
 const mockTasks = [
   {
@@ -68,8 +69,33 @@ const statusBadgeClass: Record<string, string> = {
 }
 
 export default function TasksPage() {
-  const [tasks] = useState(mockTasks)
+  const [tasks, setTasks] = useState(mockTasks)
   const [filter, setFilter] = useState("all")
+  const [isCreating, setIsCreating] = useState(false)
+  const [title, setTitle] = useState("")
+  const [description, setDescription] = useState("")
+
+  const handleCreateTask = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!title.trim()) return
+
+    setTasks((currentTasks) => [
+      ...currentTasks,
+      {
+        id: crypto.randomUUID(),
+        title: title.trim(),
+        description: description.trim() || "No description yet",
+        status: "To Do",
+        priority: "Medium",
+        assignee: "You",
+        dueDate: "Not set",
+        projectId: "1",
+      },
+    ])
+    setTitle("")
+    setDescription("")
+    setIsCreating(false)
+  }
 
   const filteredTasks = tasks.filter((task) => {
     if (filter === "all") return true
@@ -84,11 +110,25 @@ export default function TasksPage() {
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">Tasks</h1>
             <p className="text-muted-foreground mt-1 text-sm">Manage and track all project tasks</p>
           </div>
-          <Button className="gap-2">
+          <Button className="gap-2" onClick={() => setIsCreating(true)}>
             <Plus className="w-4 h-4" />
             New Task
           </Button>
         </div>
+
+        {isCreating && (
+          <form onSubmit={handleCreateTask} className="rounded-xl border bg-card p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="font-semibold">Create task</h2>
+              <Button type="button" variant="ghost" size="icon-sm" onClick={() => setIsCreating(false)} aria-label="Close form">
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Task title" required autoFocus />
+            <Input value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Description (optional)" />
+            <Button type="submit">Create task</Button>
+          </form>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card>
@@ -169,9 +209,23 @@ export default function TasksPage() {
                           <span className="text-xs text-muted-foreground">Assigned to {task.assignee}</span>
                         </div>
                       </div>
-                      <Badge className={statusBadgeClass[task.status] ?? "bg-muted text-muted-foreground"}>
-                        {task.status}
-                      </Badge>
+                      <select
+                        value={task.status}
+                        onChange={(event) => {
+                          const status = event.target.value
+                          setTasks((currentTasks) =>
+                            currentTasks.map((currentTask) =>
+                              currentTask.id === task.id ? { ...currentTask, status } : currentTask,
+                            ),
+                          )
+                        }}
+                        aria-label={`Update status for ${task.title}`}
+                        className={`rounded-md border px-2 py-1 text-sm font-medium ${statusBadgeClass[task.status] ?? "bg-muted text-muted-foreground"}`}
+                      >
+                        <option value="To Do">To Do</option>
+                        <option value="In Progress">In Progress</option>
+                        <option value="Completed">Completed</option>
+                      </select>
                     </div>
                   ))}
                 </div>

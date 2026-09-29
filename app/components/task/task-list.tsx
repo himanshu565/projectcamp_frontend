@@ -1,7 +1,7 @@
 "use client";
 
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/app/components/ui/card";
+import { Badge } from "@/app/components/ui/badge";
 import { CheckCircle2, Circle, Clock } from "lucide-react";
 
 interface Task {

@@ -1,6 +1,6 @@
 "use client"
 
-import { useRouter } from "next/navigation"
+import { useState } from "react"
 import { Bell, LogOut, Search, Settings, User } from "lucide-react"
 import { Button } from "@/app/components/ui/button"
 import { Input } from "@/app/components/ui/input"
@@ -16,7 +16,7 @@ import {
 } from "@/app/components/ui/dropdown-menu"
 
 export function Header() {
-  const router = useRouter()
+  const [showNotifications, setShowNotifications] = useState(false)
 
   const handleLogout = () => {
     localStorage.removeItem("token")
@@ -32,10 +32,25 @@ export function Header() {
 
       <div className="flex items-center gap-1.5">
         <ThemeToggle />
-        <Button variant="ghost" size="icon-sm" className="text-muted-foreground relative">
+        <div className="relative">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="text-muted-foreground relative"
+            onClick={() => setShowNotifications((visible) => !visible)}
+            aria-label="Notifications"
+            aria-expanded={showNotifications}
+          >
           <Bell className="w-4 h-4" />
           <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full bg-primary" />
-        </Button>
+          </Button>
+          {showNotifications && (
+            <div className="absolute right-0 top-11 z-20 w-72 rounded-lg border bg-popover p-4 text-popover-foreground shadow-lg">
+              <p className="font-medium">Notifications</p>
+              <p className="mt-1 text-sm text-muted-foreground">You are all caught up.</p>
+            </div>
+          )}
+        </div>
 
         <div className="w-px h-6 bg-border mx-1" />
 

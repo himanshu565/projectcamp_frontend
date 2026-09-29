@@ -12,6 +12,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/app/components/ui/card";
+import { Input } from "@/app/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
 
 interface Project {
@@ -38,6 +39,66 @@ export default function ProjectPage() {
   const [project, setProject] = useState<Project | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("overview");
+  const [memberName, setMemberName] = useState("");
+  const [isAddingMember, setIsAddingMember] = useState(false);
+
+  const updateProject = async (changes: Partial<Project>) => {
+    if (!project) return;
+    setProject((currentProject) =>
+      currentProject ? { ...currentProject, ...changes } : currentProject,
+    );
+    try {
+      await fetch(`/api/v1/projects/${projectId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(changes),
+      });
+    } catch {
+      // Keep the optimistic update when the API is unavailable.
+    }
+  };
+
+  const updateProjectStatus = (status: string) => {
+    updateProject({ status });
+  };
+
+  const saveProjectDetails = () => {
+    updateProject({ name: project?.name, description: project?.description });
+  };
+
+  const addMember = async () => {
+    if (!memberName.trim()) return;
+    const member = { id: crypto.randomUUID(), name: memberName.trim(), role: "Member" };
+    try {
+      await fetch(`/api/v1/projects/${projectId}/members`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: member.name }),
+      });
+    } catch {
+      // Keep the optimistic update when the API is unavailable.
+    }
+    setProject((currentProject) =>
+      currentProject
+        ? { ...currentProject, members: [...(currentProject.members ?? []), member] }
+        : currentProject,
+    );
+    setMemberName("");
+    setIsAddingMember(false);
+  };
+
+  const removeMember = async (memberId: string) => {
+    try {
+      await fetch(`/api/v1/projects/${projectId}/members/${memberId}`, { method: "DELETE" });
+    } finally {
+      setProject((currentProject) =>
+        currentProject
+          ? { ...currentProject, members: currentProject.members?.filter((member) => member.id !== memberId) }
+          : currentProject,
+      );
+    }
+  };
 
   useEffect(() => {
     if (!projectId) return;
@@ -123,7 +184,24 @@ export default function ProjectPage() {
             </h1>
             <p className="text-muted-foreground mt-2">{project.description}</p>
           </div>
-          <Button>Edit Project</Button>
+          <div className="flex items-center gap-3">
+            <label htmlFor="project-status" className="sr-only">
+              Update project status
+            </label>
+            <select
+              id="project-status"
+              value={project.status ?? "Planning"}
+              onChange={(event) => updateProjectStatus(event.target.value)}
+              className="rounded-md border bg-background px-3 py-2 text-sm font-medium text-foreground"
+            >
+              <option value="Unknown">Unknown</option>
+              <option value="Planning">Planning</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Completed">Completed</option>
+              <option value="On Hold">On Hold</option>
+            </select>
+            <Button onClick={() => setActiveTab("settings")}>Edit Project</Button>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -177,7 +255,7 @@ export default function ProjectPage() {
           </Card>
         </div>
 
-        <Tabs defaultValue="overview" className="w-full">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="members">Members</TabsTrigger>
@@ -220,12 +298,18 @@ export default function ProjectPage() {
                       Manage project team members
                     </CardDescription>
                   </div>
-                  <Button size="sm">
-                    Add Member
+                  <Button size="sm" onClick={() => setIsAddingMember((visible) => !visible)}>
+                    {isAddingMember ? "Cancel" : "Add Member"}
                   </Button>
                 </div>
               </CardHeader>
               <CardContent>
+                {isAddingMember && (
+                  <div className="mb-4 flex gap-2">
+                    <Input value={memberName} onChange={(event) => setMemberName(event.target.value)} placeholder="Member name" />
+                    <Button onClick={addMember}>Add</Button>
+                  </div>
+                )}
                 <div className="space-y-4">
                   {project.members && project.members.length > 0 ? (
                     project.members.map((member) => (
@@ -247,7 +331,7 @@ export default function ProjectPage() {
                             </p>
                           </div>
                         </div>
-                        <Button variant="ghost" size="sm">
+                        <Button variant="ghost" size="sm" onClick={() => removeMember(member.id)}>
                           Remove
                         </Button>
                       </div>
@@ -287,7 +371,8 @@ export default function ProjectPage() {
                   </label>
                   <input
                     type="text"
-                    defaultValue={project.name}
+                    value={project.name}
+                    onChange={(event) => setProject({ ...project, name: event.target.value })}
                     className="w-full mt-2 px-3 py-2 rounded-lg bg-input border text-foreground"
                   />
                 </div>
@@ -296,12 +381,13 @@ export default function ProjectPage() {
                     Description
                   </label>
                   <textarea
-                    defaultValue={project.description}
+                    value={project.description}
+                    onChange={(event) => setProject({ ...project, description: event.target.value })}
                     className="w-full mt-2 px-3 py-2 rounded-lg bg-input border text-foreground"
                     rows={4}
                   />
                 </div>
-                <Button>
+                <Button onClick={saveProjectDetails}>
                   Save Changes
                 </Button>
               </CardContent>

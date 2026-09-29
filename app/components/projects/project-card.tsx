@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/components/ui/card"
 import { ArrowRight, Users } from "lucide-react"
 
 interface ProjectCardProps {

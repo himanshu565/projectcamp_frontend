@@ -1,8 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { LoginForm } from "@/components/auth/login-form"
-import { RegisterForm } from "@/components/auth/register-form"
+import { LoginForm } from "@/app/components/auth/login-form"
+import { RegisterForm } from "@/app/components/auth/register-form"
 import { CheckCircle2 } from "lucide-react"
 
 const highlights = [
