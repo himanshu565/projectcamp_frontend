@@ -8,6 +8,7 @@ import { Button } from "@/app/components/ui/button";
 import { Card } from "@/app/components/ui/card";
 import { Input } from "@/app/components/ui/input";
 import { Badge } from "@/app/components/ui/badge";
+import { API_URL } from "@/lib/api";
 
 const mockTask = {
   id: "1",
@@ -39,8 +40,8 @@ const statusBadgeClass: Record<string, string> = {
 };
 
 export default function TaskDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const projectId = "1";
   const { id: taskId } = use(params);
+  const [projectId, setProjectId] = useState<string | null>(null);
   const [task, setTask] = useState(mockTask);
   const [subtasks, setSubtasks] = useState(mockTask.subtasks);
   const [newSubtask, setNewSubtask] = useState("");
@@ -49,7 +50,17 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   useEffect(() => {
     const loadTask = async () => {
       try {
-        const response = await fetch(`/api/v1/tasks/${projectId}/t/${taskId}`);
+        let resolvedProjectId = new URLSearchParams(window.location.search).get("projectId");
+        if (!resolvedProjectId) {
+          const projectsResponse = await fetch(`${API_URL}/projects`, { credentials: "include" });
+          if (!projectsResponse.ok) return;
+          const projectsData = await projectsResponse.json();
+          const projects = Array.isArray(projectsData) ? projectsData : projectsData.projects;
+          resolvedProjectId = projects?.[0]?._id ?? projects?.[0]?.id ?? null;
+        }
+        if (!resolvedProjectId) return;
+        setProjectId(resolvedProjectId);
+        const response = await fetch(`${API_URL}/tasks/${resolvedProjectId}/t/${taskId}`, { credentials: "include" });
         if (!response.ok) return;
         const data = await response.json();
         const loadedTask = data.task || data;
@@ -68,10 +79,12 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   const updateTaskStatus = async (nextStatus: string) => {
     setStatus(nextStatus);
     try {
-      await fetch(`/api/v1/tasks/${projectId}/t/${taskId}`, {
+      if (!projectId) return;
+      await fetch(`${API_URL}/tasks/${projectId}/t/${taskId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: nextStatus }),
+        credentials: "include",
       });
     } catch {
       // Keep the optimistic update when the API is unavailable.

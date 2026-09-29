@@ -1,12 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import Link from "next/link"
 import { DashboardLayout } from "@/app/components/layouts/dashboard-layout"
 import { Button } from "@/app/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app/components/ui/card"
 import { Badge } from "@/app/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs"
 import { Input } from "@/app/components/ui/input"
+import { API_URL } from "@/lib/api"
 import { Plus, Filter, X } from "lucide-react"
 
 const mockTasks = [
@@ -70,31 +72,97 @@ const statusBadgeClass: Record<string, string> = {
 
 export default function TasksPage() {
   const [tasks, setTasks] = useState(mockTasks)
+  const [defaultProjectId, setDefaultProjectId] = useState<string | null>(null)
   const [filter, setFilter] = useState("all")
   const [isCreating, setIsCreating] = useState(false)
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
 
-  const handleCreateTask = (event: React.FormEvent<HTMLFormElement>) => {
+  useEffect(() => {
+    const loadTasks = async () => {
+      try {
+        const projectsResponse = await fetch(`${API_URL}/projects`, { credentials: "include" })
+        if (!projectsResponse.ok) return
+        const projectsData = await projectsResponse.json()
+        const projects = Array.isArray(projectsData) ? projectsData : projectsData.projects
+        const projectIds = projects?.map((project: { _id?: string; id?: string }) => project._id ?? project.id).filter(Boolean) ?? []
+        if (!projectIds.length) return
+        setDefaultProjectId(projectIds[0])
+        const taskResponses = await Promise.all(projectIds.map((projectId: string) => fetch(`${API_URL}/tasks/${projectId}`, { credentials: "include" })))
+        const taskGroups = await Promise.all(taskResponses.map(async (response, index) => {
+          if (!response.ok) return []
+          const data = await response.json()
+          const loadedTasks = Array.isArray(data) ? data : data.tasks
+          return (loadedTasks ?? []).map((task: Record<string, unknown>) => ({
+            ...task,
+            id: String(task._id ?? task.id),
+            projectId: projectIds[index],
+          }))
+        }))
+        const loadedTasks = taskGroups.flat()
+        if (loadedTasks.length) setTasks(loadedTasks)
+      } catch {
+        // Keep the local fallback when the API is unavailable.
+      }
+    }
+
+    loadTasks()
+  }, [])
+
+  const handleCreateTask = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!title.trim()) return
 
-    setTasks((currentTasks) => [
-      ...currentTasks,
-      {
-        id: crypto.randomUUID(),
-        title: title.trim(),
-        description: description.trim() || "No description yet",
-        status: "To Do",
-        priority: "Medium",
-        assignee: "You",
-        dueDate: "Not set",
-        projectId: "1",
-      },
-    ])
+    const taskPayload = {
+      title: title.trim(),
+      description: description.trim() || "No description yet",
+      status: "To Do",
+      priority: "Medium",
+      assignee: "You",
+      dueDate: "Not set",
+    }
+    try {
+      if (!defaultProjectId) throw new Error("No project selected")
+      const response = await fetch(`${API_URL}/tasks/${defaultProjectId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(taskPayload),
+        credentials: "include",
+      })
+      if (!response.ok) throw new Error("Task creation failed")
+      const data = await response.json()
+      const createdTask = data.task ?? data
+      setTasks((currentTasks) => [...currentTasks, {
+        ...createdTask,
+        id: String(createdTask._id ?? createdTask.id),
+        projectId: defaultProjectId,
+      }])
+    } catch {
+      setTasks((currentTasks) => [...currentTasks, {
+        ...taskPayload,
+        id: `local-${Date.now()}`,
+        projectId: defaultProjectId ?? "local",
+      }])
+    }
     setTitle("")
     setDescription("")
     setIsCreating(false)
+  }
+
+  const updateTaskStatus = async (taskId: string, projectId: string, status: string) => {
+    setTasks((currentTasks) =>
+      currentTasks.map((task) => (task.id === taskId ? { ...task, status } : task)),
+    )
+    try {
+      await fetch(`${API_URL}/tasks/${projectId}/t/${taskId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+        credentials: "include",
+      })
+    } catch {
+      // Keep the optimistic update when the API is unavailable.
+    }
   }
 
   const filteredTasks = tasks.filter((task) => {
@@ -201,7 +269,11 @@ export default function TasksPage() {
                       className="flex items-center justify-between p-4 rounded-xl border hover:border-primary/40 transition-colors"
                     >
                       <div className="flex-1">
-                        <h3 className="font-medium text-foreground">{task.title}</h3>
+                        <h3 className="font-medium text-foreground">
+                          <Link href={`/dashboard/tasks/${task.id}?projectId=${task.projectId}`} className="hover:text-primary">
+                            {task.title}
+                          </Link>
+                        </h3>
                         <p className="text-sm text-muted-foreground mt-1">{task.description}</p>
                         <div className="flex items-center gap-4 mt-3">
                           <Badge variant="secondary">{task.priority}</Badge>
@@ -211,14 +283,7 @@ export default function TasksPage() {
                       </div>
                       <select
                         value={task.status}
-                        onChange={(event) => {
-                          const status = event.target.value
-                          setTasks((currentTasks) =>
-                            currentTasks.map((currentTask) =>
-                              currentTask.id === task.id ? { ...currentTask, status } : currentTask,
-                            ),
-                          )
-                        }}
+                        onChange={(event) => updateTaskStatus(task.id, task.projectId, event.target.value)}
                         aria-label={`Update status for ${task.title}`}
                         className={`rounded-md border px-2 py-1 text-sm font-medium ${statusBadgeClass[task.status] ?? "bg-muted text-muted-foreground"}`}
                       >

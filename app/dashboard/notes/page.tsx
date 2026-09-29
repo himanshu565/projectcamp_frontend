@@ -5,6 +5,8 @@ import { DashboardLayout } from "@/app/components/layouts/dashboard-layout"
 import { Button } from "@/app/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card"
 import { Input } from "@/app/components/ui/input"
+import { Textarea } from "@/app/components/ui/textarea"
+import { API_URL } from "@/lib/api"
 import { Plus, Search, Trash2, Edit2 } from "lucide-react"
 
 const mockNotes = [
@@ -53,7 +55,7 @@ const mockNotes = [
 const categories = ["All", "Design", "Development", "Meeting", "Feedback"]
 
 export default function NotesPage() {
-  const projectId = "1"
+  const [projectId, setProjectId] = useState<string | null>(null)
   const [notes, setNotes] = useState(mockNotes)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("All")
@@ -64,9 +66,21 @@ export default function NotesPage() {
   const [noteCategory, setNoteCategory] = useState("Design")
 
   useEffect(() => {
-    const loadNotes = async () => {
+    const loadProjectAndNotes = async () => {
       try {
-        const response = await fetch(`/api/v1/notes/${projectId}`)
+        const requestedProjectId = new URLSearchParams(window.location.search).get("projectId")
+        let resolvedProjectId = requestedProjectId
+        if (!resolvedProjectId) {
+          const projectsResponse = await fetch(`${API_URL}/projects`, { credentials: "include" })
+          if (!projectsResponse.ok) return
+          const projectsData = await projectsResponse.json()
+          const projects = Array.isArray(projectsData) ? projectsData : projectsData.projects
+          resolvedProjectId = projects?.[0]?.id ?? null
+        }
+        if (!resolvedProjectId) return
+        setProjectId(resolvedProjectId)
+
+        const response = await fetch(`${API_URL}/notes/${resolvedProjectId}`, { credentials: "include" })
         if (!response.ok) return
         const data = await response.json()
         const loadedNotes = Array.isArray(data) ? data : data.notes
@@ -76,7 +90,7 @@ export default function NotesPage() {
       }
     }
 
-    loadNotes()
+    loadProjectAndNotes()
   }, [])
 
   const resetNoteForm = () => {
@@ -104,15 +118,19 @@ export default function NotesPage() {
       content: noteContent.trim(),
       category: noteCategory,
     }
-    const endpoint = editingNoteId
-      ? `/api/v1/notes/${projectId}/n/${editingNoteId}`
-      : `/api/v1/notes/${projectId}`
+    const endpoint = editingNoteId && projectId
+      ? `${API_URL}/notes/${projectId}/n/${editingNoteId}`
+      : projectId
+        ? `${API_URL}/notes/${projectId}`
+        : null
 
     try {
+      if (!endpoint) throw new Error("No project selected")
       const response = await fetch(endpoint, {
         method: editingNoteId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(note),
+        credentials: "include",
       })
       if (!response.ok) throw new Error("Note request failed")
     } catch {
@@ -142,7 +160,9 @@ export default function NotesPage() {
 
   const deleteNote = async (noteId: string) => {
     try {
-      await fetch(`/api/v1/notes/${projectId}/n/${noteId}`, { method: "DELETE" })
+      if (projectId) {
+        await fetch(`${API_URL}/notes/${projectId}/n/${noteId}`, { method: "DELETE", credentials: "include" })
+      }
     } finally {
       setNotes((currentNotes) => currentNotes.filter((note) => note.id !== noteId))
     }
@@ -185,7 +205,7 @@ export default function NotesPage() {
               <Button type="button" variant="outline" onClick={resetNoteForm}>Cancel</Button>
             </div>
             <Input value={noteTitle} onChange={(event) => setNoteTitle(event.target.value)} placeholder="Note title" required autoFocus />
-            <Input value={noteContent} onChange={(event) => setNoteContent(event.target.value)} placeholder="Note content" required />
+            <Textarea value={noteContent} onChange={(event) => setNoteContent(event.target.value)} placeholder="Write your note..." rows={8} required />
             <select value={noteCategory} onChange={(event) => setNoteCategory(event.target.value)} className="h-9 rounded-md border bg-background px-3 text-sm">
               {categories.slice(1).map((category) => <option key={category}>{category}</option>)}
             </select>

@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Sidebar } from "./sidebar";
 import { Header } from "./header";
 import DashboardPage from "@/app/dashboard/page";
+import { API_URL } from "@/lib/api";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -20,9 +21,7 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        const apiUrl =
-          process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
-        const res = await fetch(`${apiUrl}/auth/current-user`, {
+        const res = await fetch(`${API_URL}/auth/current-user`, {
           method: "GET",
           credentials: "include", // send cookies
         });

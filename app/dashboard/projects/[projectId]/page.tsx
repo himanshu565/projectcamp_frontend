@@ -13,6 +13,7 @@ import {
   CardTitle,
 } from "@/app/components/ui/card";
 import { Input } from "@/app/components/ui/input";
+import { API_URL } from "@/lib/api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
 
 interface Project {
@@ -49,10 +50,11 @@ export default function ProjectPage() {
       currentProject ? { ...currentProject, ...changes } : currentProject,
     );
     try {
-      await fetch(`/api/v1/projects/${projectId}`, {
+      await fetch(`${API_URL}/projects/${projectId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(changes),
+        credentials: "include",
       });
     } catch {
       // Keep the optimistic update when the API is unavailable.
@@ -71,10 +73,11 @@ export default function ProjectPage() {
     if (!memberName.trim()) return;
     const member = { id: crypto.randomUUID(), name: memberName.trim(), role: "Member" };
     try {
-      await fetch(`/api/v1/projects/${projectId}/members`, {
+      await fetch(`${API_URL}/projects/${projectId}/members`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: member.name }),
+        credentials: "include",
       });
     } catch {
       // Keep the optimistic update when the API is unavailable.
@@ -90,7 +93,7 @@ export default function ProjectPage() {
 
   const removeMember = async (memberId: string) => {
     try {
-      await fetch(`/api/v1/projects/${projectId}/members/${memberId}`, { method: "DELETE" });
+      await fetch(`${API_URL}/projects/${projectId}/members/${memberId}`, { method: "DELETE", credentials: "include" });
     } finally {
       setProject((currentProject) =>
         currentProject
@@ -111,8 +114,9 @@ export default function ProjectPage() {
     try {
       const token =
         typeof window !== "undefined" ? localStorage.getItem("token") : null;
-      const response = await fetch(`/api/v1/projects/${projectId}`, {
+      const response = await fetch(`${API_URL}/projects/${projectId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: "include",
       });
 
       if (response.ok) {
@@ -148,8 +152,9 @@ export default function ProjectPage() {
     try {
       const token =
         typeof window !== "undefined" ? localStorage.getItem("token") : null;
-      const response = await fetch(`/api/v1/tasks/${projectId}`, {
+      const response = await fetch(`${API_URL}/tasks/${projectId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: "include",
       });
 
       if (response.ok) {
