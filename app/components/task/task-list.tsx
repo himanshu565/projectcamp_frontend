@@ -19,7 +19,7 @@ interface TaskListProps {
   projectId?: string;
 }
 
-export function TaskList({ tasks, loading }: TaskListProps) {
+export function TaskList({ tasks, loading, projectId }: TaskListProps) {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "done":
