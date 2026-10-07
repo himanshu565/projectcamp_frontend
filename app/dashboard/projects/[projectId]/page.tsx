@@ -56,7 +56,9 @@ export default function ProjectPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
   const [memberEmail, setMemberEmail] = useState("");
+  const [memberRole, setMemberRole] = useState<"admin" | "project_admin" | "member">("member");
   const [isAddingMember, setIsAddingMember] = useState(false);
+  const [memberError, setMemberError] = useState("");
   const [projectError, setProjectError] = useState("");
 
   const deleteProject = async () => {
@@ -102,30 +104,51 @@ export default function ProjectPage() {
   };
 
   const addMember = async () => {
-    if (!projectId || !memberEmail.trim()) return;
+    setMemberError("");
+    if (!projectId) {
+      setMemberError("Select a project before adding a member.");
+      return;
+    }
+    if (!memberEmail.trim()) {
+      setMemberError("Enter the member's email address.");
+      return;
+    }
     try {
       const response = await fetch(`${API_URL}/projects/${projectId}/members`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: memberEmail.trim(), role: "member" }),
+        body: JSON.stringify({ email: memberEmail.trim().toLowerCase(), role: memberRole }),
         credentials: "include",
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data?.message || "Member creation failed");
-      const member = getApiEntity<Record<string, unknown>>(data, "member");
-      const memberId = getPersistedId(member);
-      if (!memberId) throw new Error("Created member did not include an ID");
-      const memberName = typeof member.name === "string"
-        ? member.name
-        : typeof member.email === "string" ? member.email : "Unnamed member";
-      const memberRole = typeof member.role === "string" ? member.role : "member";
-      setProject((currentProject) => currentProject
-        ? { ...currentProject, members: [...(currentProject.members ?? []), { id: memberId, name: memberName, role: memberRole }] }
-        : currentProject);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.message || data?.error || "Unable to add project member");
+
+      const membersResponse = await fetch(`${API_URL}/projects/${projectId}/members`, {
+        credentials: "include",
+      });
+      const membersData = await membersResponse.json().catch(() => ({}));
+      if (!membersResponse.ok) throw new Error(membersData?.message || "Member was added, but the member list could not be refreshed");
+      const members = getApiCollection<Record<string, unknown>>(membersData, "members")
+        .map((member) => {
+          const id = getPersistedId(member);
+          if (!id) return null;
+          return {
+            id,
+            name: typeof member.name === "string"
+              ? member.name
+              : typeof member.email === "string" ? member.email : "Unnamed member",
+            role: typeof member.role === "string" ? member.role : "member",
+            avatar: typeof member.avatar === "string" ? member.avatar : undefined,
+          };
+        })
+        .filter(Boolean) as Project["members"];
+      setProject((currentProject) => currentProject ? { ...currentProject, members } : currentProject);
       setMemberEmail("");
+      setMemberRole("member");
       setIsAddingMember(false);
     } catch (error) {
       console.error("Failed to add member:", error);
+      setMemberError(error instanceof Error ? error.message : "Unable to add project member");
     }
   };
 
@@ -353,9 +376,17 @@ export default function ProjectPage() {
               </CardHeader>
               <CardContent>
                 {isAddingMember && (
-                  <div className="mb-4 flex gap-2">
+                  <div className="mb-4 space-y-2">
+                    <div className="flex gap-2">
                     <Input value={memberEmail} onChange={(event) => setMemberEmail(event.target.value)} placeholder="Member email" type="email" />
+                    <select value={memberRole} onChange={(event) => setMemberRole(event.target.value as typeof memberRole)} className="h-9 rounded-md border bg-background px-3 text-sm">
+                      <option value="member">Member</option>
+                      <option value="project_admin">Project Admin</option>
+                      <option value="admin">Admin</option>
+                    </select>
                     <Button onClick={addMember}>Add</Button>
+                    </div>
+                    {memberError && <p role="alert" className="text-sm text-destructive">{memberError}</p>}
                   </div>
                 )}
                 <div className="space-y-4">

@@ -6,7 +6,7 @@ import { Button } from "@/app/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/app/components/ui/card"
 import { Input } from "@/app/components/ui/input"
 import { Textarea } from "@/app/components/ui/textarea"
-import { API_URL, getApiCollection, getPersistedId } from "@/lib/api"
+import { API_URL, getApiCollection, getPersistedId, normalizeProject } from "@/lib/api"
 import { Plus, Search, Trash2, Edit2 } from "lucide-react"
 
 type Note = {
@@ -30,6 +30,7 @@ export default function NotesPage() {
   const [noteTitle, setNoteTitle] = useState("")
   const [noteContent, setNoteContent] = useState("")
   const [noteCategory, setNoteCategory] = useState("Design")
+  const [noteError, setNoteError] = useState("")
 
   useEffect(() => {
     const loadProjectAndNotes = async () => {
@@ -40,10 +41,13 @@ export default function NotesPage() {
           const projectsResponse = await fetch(`${API_URL}/projects`, { credentials: "include" })
           if (!projectsResponse.ok) return
           const projectsData = await projectsResponse.json()
-          const projects = getApiCollection<{ _id?: string }>(projectsData, "projects")
-          resolvedProjectId = projects?.[0]?._id ?? null
+          const projects = getApiCollection<Record<string, unknown>>(projectsData, "projects")
+          resolvedProjectId = projects
+            .map((project) => normalizeProject(project)?.id ?? null)
+            .find((id): id is string => Boolean(id)) ?? null
         }
         if (!resolvedProjectId) return
+        setNotes([])
         setProjectId(resolvedProjectId)
 
         const response = await fetch(`${API_URL}/notes/${resolvedProjectId}`, { credentials: "include" })
@@ -75,6 +79,7 @@ export default function NotesPage() {
     setNoteTitle("")
     setNoteContent("")
     setNoteCategory("Design")
+    setNoteError("")
   }
 
   const startEditing = (note: Note) => {
@@ -87,26 +92,34 @@ export default function NotesPage() {
 
   const saveNote = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    setNoteError("")
     if (!noteTitle.trim() || !noteContent.trim()) return
 
-    if (editingNoteId && !projectId) return
-    if (editingNoteId && editingNoteId.startsWith("local-")) return
-    const notePayload = { content: noteContent.trim() }
-    const endpoint = editingNoteId && projectId
+    if (!projectId) {
+      setNoteError("Select a project before saving a note.")
+      return
+    }
+    if (editingNoteId && editingNoteId.startsWith("local-")) {
+      setNoteError("This note is not saved on the server and cannot be edited.")
+      return
+    }
+    const notePayload = {
+      title: noteTitle.trim(),
+      content: noteContent.trim(),
+      category: noteCategory,
+    }
+    const endpoint = editingNoteId
       ? `${API_URL}/notes/${projectId}/n/${editingNoteId}`
-      : projectId
-        ? `${API_URL}/notes/${projectId}`
-        : null
+      : `${API_URL}/notes/${projectId}`
 
     try {
-      if (!endpoint) throw new Error("No project selected")
       const response = await fetch(endpoint, {
         method: editingNoteId ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(notePayload),
         credentials: "include",
       })
-      const data = await response.json()
+      const data = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(data?.message || "Note request failed")
       const returnedNote = (data?.note ?? data?.data?.note ?? data?.data ?? data) as Record<string, unknown>
       const noteId = getPersistedId(returnedNote)
@@ -124,6 +137,7 @@ export default function NotesPage() {
       resetNoteForm()
     } catch (error) {
       console.error("Failed to save note:", error)
+      setNoteError(error instanceof Error ? error.message : "Unable to save note.")
     }
   }
 
@@ -180,6 +194,7 @@ export default function NotesPage() {
             <select value={noteCategory} onChange={(event) => setNoteCategory(event.target.value)} className="h-9 rounded-md border bg-background px-3 text-sm">
               {categories.slice(1).map((category) => <option key={category}>{category}</option>)}
             </select>
+            {noteError && <p role="alert" className="text-sm text-destructive">{noteError}</p>}
             <Button type="submit">{editingNoteId ? "Save note" : "Create note"}</Button>
           </form>
         )}
