@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/app
 import { Badge } from "@/app/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs"
 import { Input } from "@/app/components/ui/input"
-import { API_URL, getApiCollection, getApiEntity } from "@/lib/api"
+import { API_URL, getApiCollection, getApiEntity, normalizeProject } from "@/lib/api"
 import { Plus, Filter, X, Trash2 } from "lucide-react"
 
 type Task = {
@@ -56,10 +56,12 @@ export default function TasksPage() {
         const projectsResponse = await fetch(`${API_URL}/projects`, { credentials: "include" })
         if (!projectsResponse.ok) return
         const projectsData = await projectsResponse.json()
-        const projects = getApiCollection<{ _id?: string }>(projectsData, "projects")
-        const projectIds = projects?.map((project: { _id?: string }) => project._id).filter((projectId: string | undefined): projectId is string => Boolean(projectId)) ?? []
+        const projects = getApiCollection<Record<string, unknown>>(projectsData, "projects")
+        const projectIds = projects
+          .map((project) => normalizeProject(project)?.id ?? null)
+          .filter((projectId): projectId is string => Boolean(projectId))
         if (!projectIds.length) return
-        setDefaultProjectId(projectIds[0])
+        setDefaultProjectId((currentProjectId) => currentProjectId ?? projectIds[0])
         const taskResponses = await Promise.all(projectIds.map((projectId: string) => fetch(`${API_URL}/tasks/${projectId}`, { credentials: "include" })))
         const taskGroups = await Promise.all(taskResponses.map(async (response, index) => {
           if (!response.ok) return []

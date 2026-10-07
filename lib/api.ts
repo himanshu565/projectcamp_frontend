@@ -1,5 +1,11 @@
 export const API_URL = "/api/v1";
 
+export function getAuthHeaders(): Record<string, string> {
+	if (typeof window === "undefined") return {};
+	const token = localStorage.getItem("token");
+	return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 export function getPersistedId(value: unknown): string | null {
 	if (!value || typeof value !== "object") return null;
 	const record = value as { _id?: unknown; id?: unknown };

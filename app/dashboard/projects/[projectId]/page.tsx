@@ -13,7 +13,7 @@ import {
   CardTitle,
 } from "@/app/components/ui/card";
 import { Input } from "@/app/components/ui/input";
-import { API_URL, getApiCollection, getApiEntity, getPersistedId, normalizeProject } from "@/lib/api";
+import { API_URL, getApiCollection, getApiEntity, getAuthHeaders, getPersistedId, normalizeProject } from "@/lib/api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/app/components/ui/tabs";
 import {
   AlertDialog,
@@ -36,6 +36,7 @@ interface Project {
   startDate?: string;
   endDate?: string;
   members?: { id: string; name: string; role?: string; avatar?: string }[];
+  memberCount?: number;
 }
 
 interface Task {
@@ -44,6 +45,30 @@ interface Task {
   description: string;
   status: "todo" | "in_progress" | "done";
   assignee: string;
+}
+
+function normalizeMembers(payload: unknown): Project["members"] {
+  return getApiCollection<Record<string, unknown>>(payload, "members")
+    .map((member) => {
+      const user = member.user && typeof member.user === "object"
+        ? member.user as Record<string, unknown>
+        : member;
+      const id = getPersistedId(user);
+      if (!id) return null;
+      return {
+        id,
+        name: typeof user.fullName === "string"
+          ? user.fullName
+          : typeof user.name === "string"
+            ? user.name
+            : typeof user.username === "string"
+              ? user.username
+              : typeof user.email === "string" ? user.email : "Unnamed member",
+        role: typeof member.role === "string" ? member.role : "member",
+        avatar: typeof user.avatar === "string" ? user.avatar : undefined,
+      };
+    })
+    .filter(Boolean) as Project["members"];
 }
 
 export default function ProjectPage() {
@@ -58,8 +83,17 @@ export default function ProjectPage() {
   const [memberEmail, setMemberEmail] = useState("");
   const [memberRole, setMemberRole] = useState<"admin" | "project_admin" | "member">("member");
   const [isAddingMember, setIsAddingMember] = useState(false);
+  const [isSubmittingMember, setIsSubmittingMember] = useState(false);
   const [memberError, setMemberError] = useState("");
+  const [memberSuccess, setMemberSuccess] = useState("");
   const [projectError, setProjectError] = useState("");
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDescription, setTaskDescription] = useState("");
+  const [taskAssignedTo, setTaskAssignedTo] = useState("");
+  const [taskError, setTaskError] = useState("");
+  const [isCreatingTask, setIsCreatingTask] = useState(false);
+  const [projectSaveError, setProjectSaveError] = useState("");
+  const [projectSaveSuccess, setProjectSaveSuccess] = useState("");
 
   const deleteProject = async () => {
     if (!projectId) return;
@@ -67,6 +101,7 @@ export default function ProjectPage() {
     try {
       const response = await fetch(`${API_URL}/projects/${projectId}`, {
         method: "DELETE",
+        headers: getAuthHeaders(),
         credentials: "include",
       });
       const data = await response.json().catch(() => ({}));
@@ -79,32 +114,41 @@ export default function ProjectPage() {
 
   const updateProject = async (changes: Partial<Project>) => {
     if (!project || !projectId) return;
+    setProjectSaveError("");
+    setProjectSaveSuccess("");
     try {
       const response = await fetch(`${API_URL}/projects/${projectId}`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify(changes),
         credentials: "include",
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.message || "Project update failed");
       const updatedProject = normalizeProject(getApiEntity<Record<string, unknown>>(data, "project"));
-      if (updatedProject) setProject(updatedProject as unknown as Project);
+      if (!updatedProject) throw new Error("Project update response did not include the updated project");
+      setProject(updatedProject as unknown as Project);
+      setProjectSaveSuccess("Project changes saved.");
     } catch (error) {
       console.error("Failed to update project:", error);
+      setProjectSaveError(error instanceof Error ? error.message : "Project update failed");
     }
   };
 
-  const updateProjectStatus = (status: string) => {
-    updateProject({ status });
-  };
-
   const saveProjectDetails = () => {
-    updateProject({ name: project?.name, description: project?.description });
+    if (!project) return;
+    void updateProject({
+      name: project.name,
+      description: project.description,
+      status: project.status ?? "Planning",
+      startDate: project.startDate || undefined,
+      endDate: project.endDate || undefined,
+    });
   };
 
   const addMember = async () => {
     setMemberError("");
+    setMemberSuccess("");
     if (!projectId) {
       setMemberError("Select a project before adding a member.");
       return;
@@ -113,49 +157,71 @@ export default function ProjectPage() {
       setMemberError("Enter the member's email address.");
       return;
     }
+    setIsSubmittingMember(true);
     try {
       const response = await fetch(`${API_URL}/projects/${projectId}/members`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
         body: JSON.stringify({ email: memberEmail.trim().toLowerCase(), role: memberRole }),
         credentials: "include",
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data?.message || data?.error || "Unable to add project member");
+      if (!response.ok) {
+        const validationDetails = Array.isArray(data?.errors)
+          ? data.errors
+            .flatMap((error: unknown) => (
+              error && typeof error === "object"
+                ? Object.entries(error).map(([field, message]) => `${field}: ${String(message)}`)
+                : [String(error)]
+            ))
+            .join(", ")
+          : "";
+        throw new Error(
+          [data?.message || data?.error, validationDetails].filter(Boolean).join(" - ")
+            || "Unable to add project member",
+        );
+      }
 
       const membersResponse = await fetch(`${API_URL}/projects/${projectId}/members`, {
+        headers: getAuthHeaders(),
         credentials: "include",
       });
       const membersData = await membersResponse.json().catch(() => ({}));
       if (!membersResponse.ok) throw new Error(membersData?.message || "Member was added, but the member list could not be refreshed");
-      const members = getApiCollection<Record<string, unknown>>(membersData, "members")
-        .map((member) => {
-          const id = getPersistedId(member);
-          if (!id) return null;
-          return {
-            id,
-            name: typeof member.name === "string"
-              ? member.name
-              : typeof member.email === "string" ? member.email : "Unnamed member",
-            role: typeof member.role === "string" ? member.role : "member",
-            avatar: typeof member.avatar === "string" ? member.avatar : undefined,
-          };
-        })
-        .filter(Boolean) as Project["members"];
+      const members = normalizeMembers(membersData);
       setProject((currentProject) => currentProject ? { ...currentProject, members } : currentProject);
       setMemberEmail("");
       setMemberRole("member");
       setIsAddingMember(false);
+      setMemberSuccess("Member added successfully.");
     } catch (error) {
       console.error("Failed to add member:", error);
       setMemberError(error instanceof Error ? error.message : "Unable to add project member");
+    } finally {
+      setIsSubmittingMember(false);
+    }
+  };
+
+  const fetchMembers = async () => {
+    if (!projectId) return;
+    try {
+      const response = await fetch(`${API_URL}/projects/${projectId}/members`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.message || "Unable to load project members");
+      const members = normalizeMembers(data);
+      setProject((currentProject) => currentProject ? { ...currentProject, members } : currentProject);
+    } catch (error) {
+      setMemberError(error instanceof Error ? error.message : "Unable to load project members");
     }
   };
 
   const removeMember = async (memberId: string) => {
     if (!projectId || !memberId) return;
     try {
-      const response = await fetch(`${API_URL}/projects/${projectId}/members/${memberId}`, { method: "DELETE", credentials: "include" });
+      const response = await fetch(`${API_URL}/projects/${projectId}/members/${memberId}`, { method: "DELETE", headers: getAuthHeaders(), credentials: "include" });
       const data = await response.json();
       if (!response.ok) throw new Error(data?.message || "Member deletion failed");
       setProject((currentProject) =>
@@ -199,7 +265,22 @@ export default function ProjectPage() {
 
       if (response.ok) {
         const data = await response.json();
-        setTasks(getApiCollection<Task>(data, "tasks"));
+        const loadedTasks = getApiCollection<Record<string, unknown>>(data, "tasks")
+          .map((task) => {
+            const id = getPersistedId(task);
+            if (!id) return null;
+            return {
+              id,
+              title: String(task.title ?? "Untitled task"),
+              description: String(task.description ?? ""),
+              status: task.status === "in_progress" || task.status === "done" ? task.status : "todo",
+              assignee: typeof task.assignedTo === "object" && task.assignedTo
+                ? String((task.assignedTo as Record<string, unknown>).username ?? "Unassigned")
+                : "Unassigned",
+            } as Task;
+          })
+          .filter(Boolean) as Task[];
+        setTasks(loadedTasks);
       } else {
         setTasks([]);
       }
@@ -211,10 +292,46 @@ export default function ProjectPage() {
     }
   };
 
+  const createProjectTask = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setTaskError("");
+    if (!projectId) {
+      setTaskError("Select a project before creating a task.");
+      return;
+    }
+    if (!taskTitle.trim()) return;
+    setIsCreatingTask(true);
+    try {
+      const response = await fetch(`${API_URL}/tasks/${projectId}`, {
+        method: "POST",
+        headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          title: taskTitle.trim(),
+          description: taskDescription.trim(),
+          status: "todo",
+          ...(taskAssignedTo ? { assignedTo: taskAssignedTo } : {}),
+        }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.message || "Task creation failed");
+      setTaskTitle("");
+      setTaskDescription("");
+      setTaskAssignedTo("");
+      setActiveTab("tasks");
+      await fetchTasks();
+    } catch (error) {
+      setTaskError(error instanceof Error ? error.message : "Task creation failed");
+    } finally {
+      setIsCreatingTask(false);
+    }
+  };
+
   useEffect(() => {
     if (!projectId) return;
-    fetchProject();
-    fetchTasks();
+    void fetchProject();
+    void fetchTasks();
+    void fetchMembers();
   }, [projectId]);
 
   if (!project) {
@@ -242,7 +359,7 @@ export default function ProjectPage() {
             <select
               id="project-status"
               value={project.status ?? "Planning"}
-              onChange={(event) => updateProjectStatus(event.target.value)}
+              onChange={(event) => setProject({ ...project, status: event.target.value })}
               className="rounded-md border bg-background px-3 py-2 text-sm font-medium text-foreground"
             >
               <option value="Unknown">Unknown</option>
@@ -320,7 +437,7 @@ export default function ProjectPage() {
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-bold text-foreground">
-                {project.members?.length ?? 0}
+                {project.members?.length ?? project.memberCount ?? 0}
               </p>
             </CardContent>
           </Card>
@@ -376,19 +493,21 @@ export default function ProjectPage() {
               </CardHeader>
               <CardContent>
                 {isAddingMember && (
-                  <div className="mb-4 space-y-2">
+                  <form className="mb-4 space-y-2" onSubmit={(event) => { event.preventDefault(); void addMember(); }}>
                     <div className="flex gap-2">
-                    <Input value={memberEmail} onChange={(event) => setMemberEmail(event.target.value)} placeholder="Member email" type="email" />
-                    <select value={memberRole} onChange={(event) => setMemberRole(event.target.value as typeof memberRole)} className="h-9 rounded-md border bg-background px-3 text-sm">
-                      <option value="member">Member</option>
-                      <option value="project_admin">Project Admin</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                    <Button onClick={addMember}>Add</Button>
+                      <Input value={memberEmail} onChange={(event) => { setMemberEmail(event.target.value); setMemberError(""); setMemberSuccess(""); }} placeholder="Member email" type="email" required disabled={isSubmittingMember} />
+                      <select value={memberRole} onChange={(event) => setMemberRole(event.target.value as typeof memberRole)} className="h-9 rounded-md border bg-background px-3 text-sm">
+                        <option value="member">Member</option>
+                        <option value="project_admin">Project Admin</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                      <Button type="submit" disabled={isSubmittingMember}>{isSubmittingMember ? "Adding..." : "Add"}</Button>
                     </div>
                     {memberError && <p role="alert" className="text-sm text-destructive">{memberError}</p>}
-                  </div>
+                  </form>
                 )}
+                {memberSuccess && <p role="status" className="mb-4 text-sm text-emerald-600">{memberSuccess}</p>}
+                {memberError && !isAddingMember && <p role="alert" className="mb-4 text-sm text-destructive">{memberError}</p>}
                 <div className="space-y-4">
                   {project.members && project.members.length > 0 ? (
                     project.members.map((member) => (
@@ -428,11 +547,35 @@ export default function ProjectPage() {
           <TabsContent value="tasks" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Project Tasks</CardTitle>
-                <CardDescription>View and manage project tasks</CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Project Tasks</CardTitle>
+                    <CardDescription>View and manage project tasks</CardDescription>
+                  </div>
+                  <Button size="sm" onClick={() => { setTaskError(""); setActiveTab("tasks"); }}>
+                    New Task
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
-                <TaskList tasks={tasks} loading={loading} />
+                <form onSubmit={createProjectTask} className="mb-5 space-y-3 rounded-lg border p-4">
+                  <Input value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} placeholder="Task title" required />
+                  <Input value={taskDescription} onChange={(event) => setTaskDescription(event.target.value)} placeholder="Description (optional)" />
+                  <select
+                    value={taskAssignedTo}
+                    onChange={(event) => setTaskAssignedTo(event.target.value)}
+                    aria-label="Assign task to"
+                    className="h-9 w-full rounded-md border bg-background px-3 text-sm"
+                  >
+                    <option value="">Unassigned</option>
+                    {(project.members ?? []).map((member) => (
+                      <option key={member.id} value={member.id}>{member.name}</option>
+                    ))}
+                  </select>
+                  {taskError && <p role="alert" className="text-sm text-destructive">{taskError}</p>}
+                  <Button type="submit" disabled={isCreatingTask}>{isCreatingTask ? "Creating..." : "Create task"}</Button>
+                </form>
+                <TaskList tasks={tasks} loading={loading} projectId={projectId} />
               </CardContent>
             </Card>
           </TabsContent>
@@ -466,9 +609,30 @@ export default function ProjectPage() {
                     rows={4}
                   />
                 </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="space-y-2 text-sm font-medium">
+                    Start date
+                    <Input type="date" value={project.startDate ?? ""} onChange={(event) => setProject({ ...project, startDate: event.target.value })} />
+                  </label>
+                  <label className="space-y-2 text-sm font-medium">
+                    End date
+                    <Input type="date" value={project.endDate ?? ""} onChange={(event) => setProject({ ...project, endDate: event.target.value })} />
+                  </label>
+                </div>
+                <label className="block space-y-2 text-sm font-medium">
+                  Status
+                  <select value={project.status ?? "Planning"} onChange={(event) => setProject({ ...project, status: event.target.value })} className="h-9 w-full rounded-md border bg-background px-3 text-sm">
+                    <option>Planning</option>
+                    <option>In Progress</option>
+                    <option>Completed</option>
+                    <option>On Hold</option>
+                  </select>
+                </label>
                 <Button onClick={saveProjectDetails}>
                   Save Changes
                 </Button>
+                {projectSaveError && <p role="alert" className="text-sm text-destructive">{projectSaveError}</p>}
+                {projectSaveSuccess && <p role="status" className="text-sm text-emerald-600">{projectSaveSuccess}</p>}
               </CardContent>
             </Card>
           </TabsContent>

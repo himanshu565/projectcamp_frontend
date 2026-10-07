@@ -18,10 +18,16 @@ type Note = {
   updatedAt?: string
 }
 
+type ProjectOption = {
+  id: string
+  name: string
+}
+
 const categories = ["All", "Design", "Development", "Meeting", "Feedback"]
 
 export default function NotesPage() {
   const [projectId, setProjectId] = useState<string | null>(null)
+  const [projects, setProjects] = useState<ProjectOption[]>([])
   const [notes, setNotes] = useState<Note[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("All")
@@ -36,23 +42,35 @@ export default function NotesPage() {
     const loadProjectAndNotes = async () => {
       try {
         const requestedProjectId = new URLSearchParams(window.location.search).get("projectId")
-        let resolvedProjectId = requestedProjectId
-        if (!resolvedProjectId) {
-          const projectsResponse = await fetch(`${API_URL}/projects`, { credentials: "include" })
-          if (!projectsResponse.ok) return
-          const projectsData = await projectsResponse.json()
-          const projects = getApiCollection<Record<string, unknown>>(projectsData, "projects")
-          resolvedProjectId = projects
-            .map((project) => normalizeProject(project)?.id ?? null)
-            .find((id): id is string => Boolean(id)) ?? null
+        const projectsResponse = await fetch(`${API_URL}/projects`, { credentials: "include" })
+        const projectsData = await projectsResponse.json().catch(() => ({}))
+        if (!projectsResponse.ok) {
+          throw new Error(projectsData?.message || "Unable to load projects.")
         }
-        if (!resolvedProjectId) return
+        const loadedProjects = getApiCollection<Record<string, unknown>>(projectsData, "projects")
+          .map((project) => {
+            const normalizedProject = normalizeProject(project)
+            if (!normalizedProject) return null
+            return {
+              id: normalizedProject.id,
+              name: String(normalizedProject.name ?? "Untitled project"),
+            }
+          })
+          .filter(Boolean) as ProjectOption[]
+        setProjects(loadedProjects)
+        const resolvedProjectId = requestedProjectId && loadedProjects.some((project) => project.id === requestedProjectId)
+          ? requestedProjectId
+          : loadedProjects[0]?.id ?? null
+        if (!resolvedProjectId) {
+          setNoteError("Select or create a project before saving a note.")
+          return
+        }
         setNotes([])
         setProjectId(resolvedProjectId)
 
         const response = await fetch(`${API_URL}/notes/${resolvedProjectId}`, { credentials: "include" })
-        if (!response.ok) return
-        const data = await response.json()
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok) throw new Error(data?.message || "Unable to load notes.")
         const loadedNotes = getApiCollection<Record<string, unknown>>(data, "notes")
         setNotes(loadedNotes.map((note) => {
           const id = getPersistedId(note)
@@ -65,8 +83,9 @@ export default function NotesPage() {
             category: String(note.category ?? "General"),
           }
         }).filter(Boolean) as Note[])
-      } catch {
+      } catch (error) {
         setNotes([])
+        setNoteError(error instanceof Error ? error.message : "Unable to load projects.")
       }
     }
 
@@ -177,11 +196,48 @@ export default function NotesPage() {
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">Notes</h1>
             <p className="text-muted-foreground mt-1 text-sm">Create and organize project notes</p>
           </div>
+          {projects.length > 0 && (
+            <select
+              value={projectId ?? ""}
+              onChange={(event) => {
+                const nextProjectId = event.target.value || null
+                setProjectId(event.target.value || null)
+                setNotes([])
+                resetNoteForm()
+                if (!nextProjectId) return
+                void fetch(`${API_URL}/notes/${nextProjectId}`, { credentials: "include" })
+                  .then(async (response) => {
+                    const data = await response.json().catch(() => ({}))
+                    if (!response.ok) throw new Error(data?.message || "Unable to load notes.")
+                    const loadedNotes = getApiCollection<Record<string, unknown>>(data, "notes")
+                    setNotes(loadedNotes.map((note) => {
+                      const id = getPersistedId(note)
+                      if (!id) return null
+                      return {
+                        ...note,
+                        id,
+                        title: String(note.title ?? "Untitled note"),
+                        content: String(note.content ?? ""),
+                        category: String(note.category ?? "General"),
+                      }
+                    }).filter(Boolean) as Note[])
+                  })
+                  .catch((error: unknown) => {
+                    setNoteError(error instanceof Error ? error.message : "Unable to load notes.")
+                  })
+              }}
+              aria-label="Select project for notes"
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+            >
+              {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+            </select>
+          )}
           <Button className="gap-2" onClick={() => setIsCreating(true)}>
             <Plus className="w-4 h-4" />
             New Note
           </Button>
         </div>
+        {noteError && !isCreating && <p role="alert" className="text-sm text-destructive">{noteError}</p>}
 
         {isCreating && (
           <form onSubmit={saveNote} className="rounded-xl border bg-card p-5 space-y-4">

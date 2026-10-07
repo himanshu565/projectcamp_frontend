@@ -33,7 +33,9 @@ export default function DashboardPage() {
         const normalizedProjects = loadedProjects.map(normalizeProject).filter((project): project is NonNullable<typeof project> => project !== null)
         setProjects(normalizedProjects.map((project) => ({
           ...project,
-          memberCount: Array.isArray(project.members) ? project.members.length : project.memberCount ?? 0,
+          memberCount: Array.isArray(project.members)
+            ? project.members.length
+            : typeof project.members === "number" ? project.members : project.memberCount ?? 0,
         })) as Project[])
       } catch {
         setProjects([])

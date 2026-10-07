@@ -58,8 +58,9 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
         return;
       }
 
-      if (data.token) {
-        localStorage.setItem("token", data.token);
+      const accessToken = data?.accessToken ?? data?.data?.accessToken;
+      if (accessToken) {
+        localStorage.setItem("token", accessToken);
       }
       window.location.href = "/dashboard";
     } catch (err) {

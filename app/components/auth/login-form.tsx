@@ -59,8 +59,9 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
       }
 
       // Save JWT token if returned
-      if (data.token) {
-        localStorage.setItem("token", data.token);
+      const accessToken = data?.accessToken ?? data?.data?.accessToken;
+      if (accessToken) {
+        localStorage.setItem("token", accessToken);
       }
       setSuccess("Login successful! Redirecting to dashboard...");
       setTimeout(() => {

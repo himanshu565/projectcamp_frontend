@@ -3,6 +3,7 @@
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Badge } from "@/app/components/ui/badge";
 import { CheckCircle2, Circle, Clock } from "lucide-react";
+import Link from "next/link";
 
 interface Task {
   id: string;
@@ -15,6 +16,7 @@ interface Task {
 interface TaskListProps {
   tasks: Task[];
   loading: boolean;
+  projectId?: string;
 }
 
 export function TaskList({ tasks, loading }: TaskListProps) {
@@ -73,11 +75,9 @@ export function TaskList({ tasks, loading }: TaskListProps) {
   return (
     <div className="space-y-3">
       {tasks.map((task) => (
-        <Card
-          key={task.id}
-          className="transition-colors hover:border-primary/40 cursor-pointer"
-        >
-          <CardContent className="p-4">
+        <Link key={task.id} href={`/dashboard/tasks/${task.id}${projectId ? `?projectId=${projectId}` : ""}`}>
+          <Card className="transition-colors hover:border-primary/40 cursor-pointer">
+            <CardContent className="p-4">
             <div className="flex items-start gap-4">
               {getStatusIcon(task.status)}
               <div className="flex-1 min-w-0">
@@ -90,8 +90,9 @@ export function TaskList({ tasks, loading }: TaskListProps) {
                 {getStatusBadge(task.status)}
               </div>
             </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </Link>
       ))}
     </div>
   );
