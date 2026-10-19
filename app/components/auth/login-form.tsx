@@ -16,15 +16,15 @@ import {
   CardTitle,
 } from "@/app/components/ui/card";
 import { Alert, AlertDescription } from "@/app/components/ui/alert";
-import { AlertCircle, CheckCircle2, Loader2, Lock, Mail, User } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, Lock, Mail } from "lucide-react";
 
 interface LoginFormProps {
   onSwitchToRegister: () => void;
+  onForgotPassword?: () => void;
 }
 
-export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
+export function LoginForm({ onSwitchToRegister, onForgotPassword }: LoginFormProps) {
   const [email, setEmail] = useState("");
-  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -36,9 +36,8 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
     setError("");
     setLoading(true);
 
-    // Basic validation
-    if (!email || !username || !password) {
-      setError("Email, username, and password are required.");
+    if (!email.trim() || !password) {
+      setError("Email and password are required.");
       setLoading(false);
       return;
     }
@@ -47,28 +46,29 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
       const response = await fetch(`${API_URL}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, username, password }),
-        credentials: "include", // if backend sets cookies
+        body: JSON.stringify({ email: email.trim(), password }),
+        credentials: "include",
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        setError(data.message || "Login failed");
+        setError(data?.message || "Invalid credentials. Please check your email and password.");
         return;
       }
 
-      // Save JWT token if returned
+      // Legacy fallback for localStorage if accessToken returned
       const accessToken = data?.accessToken ?? data?.data?.accessToken;
-      if (accessToken) {
+      if (accessToken && typeof window !== "undefined") {
         localStorage.setItem("token", accessToken);
       }
+
       setSuccess("Login successful! Redirecting to dashboard...");
       setTimeout(() => {
         router.push("/dashboard");
-      }, 1200);
-    } catch (err) {
-      setError("An error occurred. Please try again.");
+      }, 800);
+    } catch {
+      setError("Unable to connect to the server. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }
@@ -84,13 +84,13 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
             <Alert variant="destructive">
-              <AlertCircle />
+              <AlertCircle className="w-4 h-4" />
               <AlertDescription>{error}</AlertDescription>
             </Alert>
           )}
           {success && (
             <Alert className="border-success/30 bg-success/10 text-success-foreground [&>svg]:text-success">
-              <CheckCircle2 />
+              <CheckCircle2 className="w-4 h-4" />
               <AlertDescription className="text-foreground/90">{success}</AlertDescription>
             </Alert>
           )}
@@ -107,21 +107,7 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
                 className="pl-9"
-              />
-            </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="username">Username</Label>
-            <div className="relative">
-              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <Input
-                id="username"
-                type="text"
-                placeholder="your username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                disabled={loading}
-                className="pl-9"
+                required
               />
             </div>
           </div>
@@ -129,12 +115,15 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="password">Password</Label>
-              <button
-                type="button"
-                className="text-xs text-primary hover:underline font-medium"
-              >
-                Forgot password?
-              </button>
+              {onForgotPassword && (
+                <button
+                  type="button"
+                  onClick={onForgotPassword}
+                  className="text-xs text-primary hover:underline font-medium"
+                >
+                  Forgot password?
+                </button>
+              )}
             </div>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -146,6 +135,7 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={loading}
                 className="pl-9"
+                required
               />
             </div>
           </div>

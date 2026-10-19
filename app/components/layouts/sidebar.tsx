@@ -4,6 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { LayoutGrid, CheckSquare, FileText, LogOut } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { logout } from "@/lib/api"
 
 const navItems = [
   { href: "/dashboard", label: "Projects", icon: LayoutGrid },
@@ -15,9 +16,8 @@ const navItems = [
 export function Sidebar() {
   const pathname = usePathname()
 
-  const handleLogout = () => {
-    localStorage.removeItem("token")
-    window.location.href = "/"
+  const handleLogout = async () => {
+    await logout()
   }
 
   return (

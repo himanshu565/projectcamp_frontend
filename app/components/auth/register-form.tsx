@@ -15,7 +15,7 @@ import {
   CardTitle,
 } from "@/app/components/ui/card";
 import { Alert, AlertDescription } from "@/app/components/ui/alert";
-import { AlertCircle, Loader2, Lock, Mail, User } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, Lock, Mail, User } from "lucide-react";
 
 interface RegisterFormProps {
   onSwitchToLogin: () => void;
@@ -28,17 +28,24 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isRegistered, setIsRegistered] = useState(false);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
-    if (!email || !username || !password) {
+    if (!email.trim() || !username.trim() || !password) {
       setError("Email, username, and password are required.");
       return;
     }
 
     if (password !== confirmPassword) {
-      setError("Passwords do not match");
+      setError("Passwords do not match.");
+      return;
+    }
+
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters long.");
       return;
     }
 
@@ -48,27 +55,56 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
       const response = await fetch(`${API_URL}/auth/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, username, password }),
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          username: username.trim().toLowerCase(),
+          password,
+        }),
+        credentials: "include",
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        setError(data.message || "Registration failed");
+        const errorMsg =
+          data?.message ||
+          (Array.isArray(data?.errors) && data.errors[0]?.message) ||
+          "Registration failed. Please check your inputs.";
+        setError(errorMsg);
         return;
       }
 
-      const accessToken = data?.accessToken ?? data?.data?.accessToken;
-      if (accessToken) {
-        localStorage.setItem("token", accessToken);
-      }
-      window.location.href = "/dashboard";
-    } catch (err) {
-      setError("An error occurred. Please try again.");
+      setIsRegistered(true);
+    } catch {
+      setError("Unable to connect to the server. Please check your connection and try again.");
     } finally {
       setLoading(false);
     }
   };
+
+  if (isRegistered) {
+    return (
+      <Card className="shadow-lg">
+        <CardHeader className="space-y-1.5 text-center">
+          <div className="mx-auto w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center text-emerald-600 mb-2">
+            <CheckCircle2 className="w-6 h-6" />
+          </div>
+          <CardTitle className="text-2xl">Account Created!</CardTitle>
+          <CardDescription>
+            We have sent a verification email to <span className="font-medium text-foreground">{email}</span>.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground text-center">
+            Please check your inbox to verify your email. You can now sign in to your workspace.
+          </p>
+          <Button onClick={onSwitchToLogin} className="w-full rounded-full">
+            Proceed to Sign In
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="shadow-lg">

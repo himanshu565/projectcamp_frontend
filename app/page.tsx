@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { LoginForm } from "@/app/components/auth/login-form"
 import { RegisterForm } from "@/app/components/auth/register-form"
+import { ForgotPasswordForm } from "@/app/components/auth/forgot-password-form"
 import { CheckCircle2 } from "lucide-react"
 
 const highlights = [
@@ -12,7 +13,7 @@ const highlights = [
 ]
 
 export default function Home() {
-  const [isLogin, setIsLogin] = useState(true)
+  const [authMode, setAuthMode] = useState<"login" | "register" | "forgot-password">("login")
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -65,10 +66,17 @@ export default function Home() {
             <span className="font-semibold text-lg tracking-tight">Project Camp</span>
           </div>
 
-          {isLogin ? (
-            <LoginForm onSwitchToRegister={() => setIsLogin(false)} />
-          ) : (
-            <RegisterForm onSwitchToLogin={() => setIsLogin(true)} />
+          {authMode === "login" && (
+            <LoginForm
+              onSwitchToRegister={() => setAuthMode("register")}
+              onForgotPassword={() => setAuthMode("forgot-password")}
+            />
+          )}
+          {authMode === "register" && (
+            <RegisterForm onSwitchToLogin={() => setAuthMode("login")} />
+          )}
+          {authMode === "forgot-password" && (
+            <ForgotPasswordForm onSwitchToLogin={() => setAuthMode("login")} />
           )}
         </div>
       </div>

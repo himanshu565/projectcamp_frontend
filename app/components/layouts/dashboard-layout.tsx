@@ -6,8 +6,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sidebar } from "./sidebar";
 import { Header } from "./header";
-import DashboardPage from "@/app/dashboard/page";
-import { API_URL } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
@@ -19,24 +18,27 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let isMounted = true;
     const checkAuth = async () => {
       try {
-        const res = await fetch(`${API_URL}/auth/current-user`, {
-          method: "GET",
-          credentials: "include", // send cookies
-        });
-        if (res.ok) {
+        await apiFetch("/auth/current-user");
+        if (isMounted) {
           setIsAuthenticated(true);
-        } else {
-          router.push("/");
         }
       } catch {
-        router.push("/");
+        if (isMounted) {
+          router.push("/");
+        }
       } finally {
-        setLoading(false);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
     };
     checkAuth();
+    return () => {
+      isMounted = false;
+    };
   }, [router]);
 
   if (loading) {
