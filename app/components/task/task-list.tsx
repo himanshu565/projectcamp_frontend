@@ -12,6 +12,8 @@ interface Task {
   description: string;
   status: "todo" | "in_progress" | "done";
   assignee: string;
+  priority?: "low" | "medium" | "high" | "urgent";
+  dueDate?: string;
 }
 
 interface TaskListProps {
@@ -31,6 +33,35 @@ export function TaskList({ tasks, loading, projectId, error, onRetry }: TaskList
         return <Clock className="w-4 h-4 text-blue-500" />;
       default:
         return <Circle className="w-4 h-4 text-muted-foreground" />;
+    }
+  };
+
+  const getPriorityBadge = (priority?: string) => {
+    switch (priority) {
+      case "urgent":
+        return (
+          <Badge className="bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20 text-xs uppercase tracking-wider font-semibold">
+            Urgent
+          </Badge>
+        );
+      case "high":
+        return (
+          <Badge className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20 text-xs capitalize">
+            High
+          </Badge>
+        );
+      case "low":
+        return (
+          <Badge variant="outline" className="text-muted-foreground text-xs capitalize">
+            Low
+          </Badge>
+        );
+      default:
+        return (
+          <Badge variant="outline" className="text-xs text-blue-600 dark:text-blue-400 border-blue-500/20 capitalize">
+            Medium
+          </Badge>
+        );
     }
   };
 
@@ -98,18 +129,26 @@ export function TaskList({ tasks, loading, projectId, error, onRetry }: TaskList
         <Link key={task.id} href={`/dashboard/tasks/${task.id}${projectId ? `?projectId=${projectId}` : ""}`}>
           <Card className="transition-colors hover:border-primary/40 cursor-pointer">
             <CardContent className="p-4">
-            <div className="flex items-start gap-4">
-              {getStatusIcon(task.status)}
-              <div className="flex-1 min-w-0">
-                <h3 className="font-medium truncate">{task.title}</h3>
-                <p className="text-sm text-muted-foreground truncate">
-                  {task.description}
-                </p>
+              <div className="flex items-start gap-4">
+                {getStatusIcon(task.status)}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-medium truncate">{task.title}</h3>
+                    {getPriorityBadge(task.priority)}
+                  </div>
+                  <p className="text-sm text-muted-foreground truncate">
+                    {task.description}
+                  </p>
+                  {task.dueDate && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Due: {new Date(task.dueDate).toLocaleDateString()}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  {getStatusBadge(task.status)}
+                </div>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0">
-                {getStatusBadge(task.status)}
-              </div>
-            </div>
             </CardContent>
           </Card>
         </Link>

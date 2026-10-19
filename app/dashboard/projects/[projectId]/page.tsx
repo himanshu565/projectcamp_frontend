@@ -34,7 +34,22 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/app/components/ui/alert-dialog";
-import { AlertCircle, CheckCircle2, Loader2, RotateCw, Shield, Trash2, Users } from "lucide-react";
+import {
+  Activity,
+  AlertCircle,
+  Calendar,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  FileText,
+  ListTodo,
+  Loader2,
+  RotateCw,
+  Shield,
+  Trash2,
+  Users,
+} from "lucide-react";
 import { memberInviteSchema, projectSchema, taskSchema } from "@/lib/validations";
 
 interface MemberItem {
@@ -63,6 +78,110 @@ interface Task {
   description: string;
   status: "todo" | "in_progress" | "done";
   assignee: string;
+  priority?: "low" | "medium" | "high" | "urgent";
+  dueDate?: string;
+}
+
+interface ActivityItem {
+  id: string;
+  actionType: string;
+  resourceType: string;
+  summary: string;
+  createdAt: string;
+  actor: {
+    id: string;
+    username: string;
+    fullName?: string;
+    avatar?: { url?: string } | string;
+    email?: string;
+  };
+  metadata?: Record<string, unknown>;
+}
+
+interface HealthSummary {
+  projectId: string;
+  projectName: string;
+  projectStatus: string;
+  healthStatus: "On Track" | "At Risk" | "Critical" | "Completed" | "Not Started";
+  healthReason: string;
+  completionPercentage: number;
+  tasks: {
+    total: number;
+    completed: number;
+    inProgress: number;
+    todo: number;
+    overdue: number;
+    dueSoon: number;
+  };
+  priorityBreakdown: {
+    low: number;
+    medium: number;
+    high: number;
+    urgent: number;
+  };
+  schedule: {
+    startDate: string | null;
+    endDate: string | null;
+    isOverdue: boolean;
+  };
+  memberCount: number;
+}
+
+const healthStatusConfig: Record<
+  HealthSummary["healthStatus"],
+  { label: string; badgeClass: string }
+> = {
+  "On Track": {
+    label: "On Track",
+    badgeClass: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30",
+  },
+  "At Risk": {
+    label: "At Risk",
+    badgeClass: "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30",
+  },
+  "Critical": {
+    label: "Critical",
+    badgeClass: "bg-destructive/10 text-destructive border-destructive/30",
+  },
+  "Completed": {
+    label: "Completed",
+    badgeClass: "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30",
+  },
+  "Not Started": {
+    label: "Not Started",
+    badgeClass: "bg-muted text-muted-foreground border-border",
+  },
+};
+
+function getActivityIcon(resourceType: string) {
+  switch (resourceType) {
+    case "task":
+    case "subtask":
+      return <ListTodo className="w-4 h-4 text-primary" />;
+    case "member":
+      return <Users className="w-4 h-4 text-blue-500" />;
+    case "note":
+      return <FileText className="w-4 h-4 text-amber-500" />;
+    case "project":
+      return <Shield className="w-4 h-4 text-purple-500" />;
+    default:
+      return <Activity className="w-4 h-4 text-muted-foreground" />;
+  }
+}
+
+function formatRelativeOrDate(isoString: string): string {
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return isoString;
+    return d.toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return isoString;
+  }
 }
 
 function normalizeMembers(payload: unknown): MemberItem[] {
@@ -141,8 +260,23 @@ export default function ProjectPage() {
   const [taskTitle, setTaskTitle] = useState("");
   const [taskDescription, setTaskDescription] = useState("");
   const [taskAssignedTo, setTaskAssignedTo] = useState("");
+  const [taskPriority, setTaskPriority] = useState<"low" | "medium" | "high" | "urgent">("medium");
+  const [taskDueDate, setTaskDueDate] = useState("");
   const [taskError, setTaskError] = useState("");
   const [isCreatingTask, setIsCreatingTask] = useState(false);
+
+  // Health summary state
+  const [healthSummary, setHealthSummary] = useState<HealthSummary | null>(null);
+  const [healthLoading, setHealthLoading] = useState(false);
+  const [healthError, setHealthError] = useState<string | null>(null);
+
+  // Activity timeline state
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [activitiesLoading, setActivitiesLoading] = useState(false);
+  const [activitiesError, setActivitiesError] = useState<string | null>(null);
+  const [activityPage, setActivityPage] = useState(1);
+  const [activityTotalPages, setActivityTotalPages] = useState(1);
+  const [activityFilter, setActivityFilter] = useState("all");
 
   const isAdmin = project?.role === "admin";
   const canManageMembers = isAdmin;
@@ -213,6 +347,93 @@ export default function ProjectPage() {
     }
   }, [projectId]);
 
+  const fetchHealthSummary = useCallback(async () => {
+    if (!projectId) return;
+    setHealthLoading(true);
+    setHealthError(null);
+    try {
+      const response = await fetch(`${API_URL}/projects/${projectId}/health-summary`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      });
+      if (response.ok) {
+        const json = await response.json();
+        setHealthSummary(json.data ?? null);
+      } else {
+        const err = await response.json().catch(() => ({}));
+        setHealthError(err?.message || "Failed to load project health summary");
+      }
+    } catch {
+      setHealthError("Unable to reach health summary service");
+    } finally {
+      setHealthLoading(false);
+    }
+  }, [projectId]);
+
+  const fetchActivities = useCallback(
+    async (page = 1, resourceType = "all") => {
+      if (!projectId) return;
+      setActivitiesLoading(true);
+      setActivitiesError(null);
+      try {
+        let url = `${API_URL}/projects/${projectId}/activities?page=${page}&limit=10`;
+        if (resourceType && resourceType !== "all") {
+          url += `&resourceType=${encodeURIComponent(resourceType)}`;
+        }
+        const response = await fetch(url, {
+          headers: getAuthHeaders(),
+          credentials: "include",
+        });
+        if (response.ok) {
+          const json = await response.json();
+          const rawActivities = Array.isArray(json.data?.activities) ? json.data.activities : [];
+          const normalized: ActivityItem[] = rawActivities.map(
+            (item: Record<string, unknown>) => {
+              const actorObj =
+                typeof item.actor === "object" && item.actor
+                  ? (item.actor as Record<string, unknown>)
+                  : {};
+              return {
+                id: String(item._id || item.id || Math.random()),
+                actionType: String(item.actionType || "unknown"),
+                resourceType: String(item.resourceType || "unknown"),
+                summary: String(item.summary || ""),
+                createdAt: String(item.createdAt || new Date().toISOString()),
+                actor: {
+                  id: String(actorObj._id || actorObj.id || ""),
+                  username: String(actorObj.username || "Unknown"),
+                  fullName: typeof actorObj.fullName === "string" ? actorObj.fullName : undefined,
+                  email: typeof actorObj.email === "string" ? actorObj.email : undefined,
+                  avatar:
+                    typeof actorObj.avatar === "object" && actorObj.avatar
+                      ? (actorObj.avatar as { url?: string })
+                      : typeof actorObj.avatar === "string"
+                      ? actorObj.avatar
+                      : undefined,
+                },
+                metadata:
+                  typeof item.metadata === "object" && item.metadata
+                    ? (item.metadata as Record<string, unknown>)
+                    : {},
+              };
+            }
+          );
+          setActivities(normalized);
+          setActivityPage(json.data?.pagination?.page || 1);
+          setActivityTotalPages(json.data?.pagination?.totalPages || 1);
+        } else {
+          const err = await response.json().catch(() => ({}));
+          setActivitiesError(err?.message || "Failed to load project activities");
+        }
+      } catch {
+        setActivitiesError("Unable to reach activity service");
+      } finally {
+        setActivitiesLoading(false);
+      }
+    },
+    [projectId]
+  );
+
   const fetchTasks = useCallback(async () => {
     if (!projectId) return;
     try {
@@ -237,6 +458,8 @@ export default function ProjectPage() {
                 typeof task.assignedTo === "object" && task.assignedTo
                   ? String((task.assignedTo as Record<string, unknown>).username ?? "Unassigned")
                   : "Unassigned",
+              priority: (task.priority as Task["priority"]) ?? "medium",
+              dueDate: typeof task.dueDate === "string" ? task.dueDate : undefined,
             } as Task;
           })
           .filter((t): t is Task => t !== null);
@@ -256,10 +479,16 @@ export default function ProjectPage() {
   useEffect(() => {
     if (!projectId) return;
     const loadAll = async () => {
-      await Promise.all([fetchProject(), fetchTasks(), fetchMembers()]);
+      await Promise.all([
+        fetchProject(),
+        fetchTasks(),
+        fetchMembers(),
+        fetchHealthSummary(),
+        fetchActivities(1, "all"),
+      ]);
     };
     void loadAll();
-  }, [projectId, fetchProject, fetchTasks, fetchMembers]);
+  }, [projectId, fetchProject, fetchTasks, fetchMembers, fetchHealthSummary, fetchActivities]);
 
   const deleteProject = async () => {
     if (!projectId) return;
@@ -390,6 +619,8 @@ export default function ProjectPage() {
       }
 
       await fetchMembers();
+      void fetchActivities(1, activityFilter);
+      void fetchHealthSummary();
       setMemberEmail("");
       setMemberRole("member");
       setIsAddingMember(false);
@@ -434,6 +665,7 @@ export default function ProjectPage() {
             }
           : prev
       );
+      void fetchActivities(1, activityFilter);
       setMemberSuccess("Member role updated successfully.");
     } catch (error) {
       setMemberError(error instanceof Error ? error.message : "Failed to update member role");
@@ -464,6 +696,8 @@ export default function ProjectPage() {
             }
           : prev
       );
+      void fetchActivities(1, activityFilter);
+      void fetchHealthSummary();
       setMemberSuccess("Member removed from project.");
     } catch (error) {
       setMemberError(error instanceof Error ? error.message : "Failed to remove member");
@@ -484,6 +718,8 @@ export default function ProjectPage() {
       title: taskTitle,
       description: taskDescription,
       status: "todo",
+      priority: taskPriority,
+      dueDate: taskDueDate || undefined,
       assignedTo: taskAssignedTo || undefined,
     });
 
@@ -502,6 +738,8 @@ export default function ProjectPage() {
           title: taskTitle.trim(),
           description: taskDescription.trim(),
           status: "todo",
+          priority: taskPriority,
+          ...(taskDueDate ? { dueDate: taskDueDate } : {}),
           ...(taskAssignedTo ? { assignedTo: taskAssignedTo } : {}),
         }),
       });
@@ -510,8 +748,12 @@ export default function ProjectPage() {
       setTaskTitle("");
       setTaskDescription("");
       setTaskAssignedTo("");
+      setTaskDueDate("");
+      setTaskPriority("medium");
       setActiveTab("tasks");
       await fetchTasks();
+      void fetchHealthSummary();
+      void fetchActivities(1, activityFilter);
     } catch (error) {
       setTaskError(error instanceof Error ? error.message : "Task creation failed");
     } finally {
@@ -692,15 +934,151 @@ export default function ProjectPage() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="members">Members</TabsTrigger>
+            <TabsTrigger value="activity">Activity</TabsTrigger>
             <TabsTrigger value="tasks">Tasks</TabsTrigger>
+            <TabsTrigger value="members">Members</TabsTrigger>
             <TabsTrigger value="settings">Settings</TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-4 pt-4">
+            {healthSummary && (
+              <Card>
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <Activity className="w-5 h-5 text-primary" />
+                        Project Health &amp; Progress
+                      </CardTitle>
+                      <CardDescription>
+                        Real-time status calculated from persisted tasks, deadlines, and priorities
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant="outline"
+                        className={
+                          healthStatusConfig[healthSummary.healthStatus]?.badgeClass ||
+                          "bg-muted text-muted-foreground"
+                        }
+                      >
+                        {healthSummary.healthStatus}
+                      </Badge>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => void fetchHealthSummary()}
+                        disabled={healthLoading}
+                        aria-label="Refresh health summary"
+                        className="h-8 w-8"
+                      >
+                        <RotateCw className={`w-3.5 h-3.5 ${healthLoading ? "animate-spin" : ""}`} />
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center text-sm font-medium">
+                      <span>Overall Completion</span>
+                      <span className="text-muted-foreground font-semibold">
+                        {healthSummary.completionPercentage}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-secondary h-2.5 rounded-full overflow-hidden">
+                      <div
+                        className="bg-primary h-full transition-all duration-300 rounded-full"
+                        style={{
+                          width: `${Math.min(100, Math.max(0, healthSummary.completionPercentage))}%`,
+                        }}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">{healthSummary.healthReason}</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2">
+                    <div className="p-3 rounded-lg border bg-secondary/20">
+                      <span className="text-xs text-muted-foreground block">Total Tasks</span>
+                      <span className="text-lg font-bold text-foreground">
+                        {healthSummary.tasks.total}
+                      </span>
+                    </div>
+                    <div className="p-3 rounded-lg border bg-secondary/20">
+                      <span className="text-xs text-muted-foreground block">Completed</span>
+                      <span className="text-lg font-bold text-emerald-600 dark:text-emerald-400">
+                        {healthSummary.tasks.completed}
+                      </span>
+                    </div>
+                    <div className="p-3 rounded-lg border bg-secondary/20">
+                      <span className="text-xs text-muted-foreground block">In Progress</span>
+                      <span className="text-lg font-bold text-blue-600 dark:text-blue-400">
+                        {healthSummary.tasks.inProgress}
+                      </span>
+                    </div>
+                    <div className="p-3 rounded-lg border bg-secondary/20">
+                      <span className="text-xs text-muted-foreground block">Overdue</span>
+                      <span
+                        className={`text-lg font-bold ${
+                          healthSummary.tasks.overdue > 0
+                            ? "text-destructive"
+                            : "text-foreground"
+                        }`}
+                      >
+                        {healthSummary.tasks.overdue}
+                      </span>
+                    </div>
+                    <div className="p-3 rounded-lg border bg-secondary/20 col-span-2 sm:col-span-1">
+                      <span className="text-xs text-muted-foreground block">Due Soon (3d)</span>
+                      <span
+                        className={`text-lg font-bold ${
+                          healthSummary.tasks.dueSoon > 0
+                            ? "text-amber-600 dark:text-amber-400"
+                            : "text-foreground"
+                        }`}
+                      >
+                        {healthSummary.tasks.dueSoon}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2">
+                    <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider block mb-2">
+                      Priority Distribution
+                    </span>
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-destructive/10 text-destructive border border-destructive/20 font-medium">
+                        Urgent: {healthSummary.priorityBreakdown.urgent}
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20 font-medium">
+                        High: {healthSummary.priorityBreakdown.high}
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20 font-medium">
+                        Medium: {healthSummary.priorityBreakdown.medium}
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-secondary text-muted-foreground border border-border font-medium">
+                        Low: {healthSummary.priorityBreakdown.low}
+                      </span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {healthError && !healthSummary && (
+              <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 flex items-center justify-between text-sm text-destructive">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{healthError}</span>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => void fetchHealthSummary()}>
+                  Retry
+                </Button>
+              </div>
+            )}
+
             <Card>
               <CardHeader>
                 <CardTitle>Project Overview</CardTitle>
@@ -715,8 +1093,11 @@ export default function ProjectPage() {
                 </div>
                 <div>
                   <h3 className="text-sm font-semibold text-foreground mb-1">Timeline</h3>
-                  <p className="text-muted-foreground text-sm">
-                    {project.startDate || "Unspecified"} &rarr; {project.endDate || "Unspecified"}
+                  <p className="text-muted-foreground text-sm flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5 shrink-0" />
+                    <span>
+                      {project.startDate || "Unspecified"} &rarr; {project.endDate || "Unspecified"}
+                    </span>
                   </p>
                 </div>
                 <div>
@@ -732,6 +1113,152 @@ export default function ProjectPage() {
                     </span>
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Activity Timeline Tab */}
+          <TabsContent value="activity" className="space-y-4 pt-4">
+            <Card>
+              <CardHeader>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      <Activity className="w-5 h-5 text-primary" />
+                      Project Activity Timeline
+                    </CardTitle>
+                    <CardDescription>
+                      Audited history of project changes, task mutations, and team events
+                    </CardDescription>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void fetchActivities(activityPage, activityFilter)}
+                    disabled={activitiesLoading}
+                    className="gap-2 shrink-0 self-start sm:self-auto"
+                  >
+                    <RotateCw className={`w-3.5 h-3.5 ${activitiesLoading ? "animate-spin" : ""}`} />
+                    Refresh
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Filter buttons */}
+                <div className="flex items-center gap-2 flex-wrap pb-1">
+                  {[
+                    { key: "all", label: "All Activity" },
+                    { key: "task", label: "Tasks" },
+                    { key: "member", label: "Members" },
+                    { key: "project", label: "Project" },
+                    { key: "note", label: "Notes" },
+                    { key: "subtask", label: "Subtasks" },
+                  ].map((filter) => (
+                    <Button
+                      key={filter.key}
+                      variant={activityFilter === filter.key ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => {
+                        setActivityFilter(filter.key);
+                        void fetchActivities(1, filter.key);
+                      }}
+                      className="text-xs h-8"
+                    >
+                      {filter.label}
+                    </Button>
+                  ))}
+                </div>
+
+                {/* Timeline stream */}
+                {activitiesLoading ? (
+                  <div className="flex items-center justify-center py-12 text-muted-foreground gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Loading activity stream...</span>
+                  </div>
+                ) : activitiesError ? (
+                  <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center space-y-3">
+                    <AlertCircle className="w-6 h-6 text-destructive mx-auto" />
+                    <p className="text-sm font-medium text-destructive">{activitiesError}</p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void fetchActivities(activityPage, activityFilter)}
+                      className="gap-2"
+                    >
+                      <RotateCw className="w-3.5 h-3.5" />
+                      Try again
+                    </Button>
+                  </div>
+                ) : activities.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground space-y-2">
+                    <Activity className="w-8 h-8 mx-auto opacity-40" />
+                    <p>No activity records found for this filter.</p>
+                  </div>
+                ) : (
+                  <div className="divide-y rounded-xl border bg-card/60">
+                    {activities.map((item) => (
+                      <div
+                        key={item.id}
+                        className="p-4 flex items-start gap-3 hover:bg-secondary/20 transition-colors"
+                      >
+                        <div className="p-2 rounded-lg bg-secondary shrink-0 mt-0.5">
+                          {getActivityIcon(item.resourceType)}
+                        </div>
+                        <div className="flex-1 min-w-0 space-y-1">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-medium text-sm text-foreground">
+                                {item.actor.fullName || item.actor.username || "Team member"}
+                              </span>
+                              <Badge
+                                variant="outline"
+                                className="text-[10px] capitalize font-normal px-1.5 py-0"
+                              >
+                                {item.actionType.replace(/_/g, " ").toLowerCase()}
+                              </Badge>
+                            </div>
+                            <span className="text-xs text-muted-foreground shrink-0 flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {formatRelativeOrDate(item.createdAt)}
+                            </span>
+                          </div>
+                          <p className="text-sm text-muted-foreground break-words">{item.summary}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Pagination */}
+                {activityTotalPages > 1 && (
+                  <div className="flex items-center justify-between pt-2">
+                    <span className="text-xs text-muted-foreground">
+                      Page {activityPage} of {activityTotalPages}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={activityPage <= 1 || activitiesLoading}
+                        onClick={() => void fetchActivities(activityPage - 1, activityFilter)}
+                        className="gap-1 text-xs"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                        Previous
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={activityPage >= activityTotalPages || activitiesLoading}
+                        onClick={() => void fetchActivities(activityPage + 1, activityFilter)}
+                        className="gap-1 text-xs"
+                      >
+                        Next
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -948,19 +1475,60 @@ export default function ProjectPage() {
                     onChange={(event) => setTaskDescription(event.target.value)}
                     placeholder="Description (optional)"
                   />
-                  <select
-                    value={taskAssignedTo}
-                    onChange={(event) => setTaskAssignedTo(event.target.value)}
-                    aria-label="Assign task to"
-                    className="h-9 w-full rounded-md border bg-background px-3 text-sm text-foreground"
-                  >
-                    <option value="">Unassigned</option>
-                    {(project.members ?? []).map((member) => (
-                      <option key={member.id} value={member.id}>
-                        {member.name} ({member.role})
-                      </option>
-                    ))}
-                  </select>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label htmlFor="task-assignee" className="text-xs font-medium text-muted-foreground block mb-1">
+                        Assignee
+                      </label>
+                      <select
+                        id="task-assignee"
+                        value={taskAssignedTo}
+                        onChange={(event) => setTaskAssignedTo(event.target.value)}
+                        aria-label="Assign task to"
+                        className="h-9 w-full rounded-md border bg-background px-3 text-sm text-foreground"
+                      >
+                        <option value="">Unassigned</option>
+                        {(project.members ?? []).map((member) => (
+                          <option key={member.id} value={member.id}>
+                            {member.name} ({member.role})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="task-priority" className="text-xs font-medium text-muted-foreground block mb-1">
+                        Priority
+                      </label>
+                      <select
+                        id="task-priority"
+                        value={taskPriority}
+                        onChange={(event) =>
+                          setTaskPriority(
+                            event.target.value as "low" | "medium" | "high" | "urgent"
+                          )
+                        }
+                        aria-label="Task priority"
+                        className="h-9 w-full rounded-md border bg-background px-3 text-sm text-foreground capitalize"
+                      >
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">High</option>
+                        <option value="urgent">Urgent</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label htmlFor="task-due-date" className="text-xs font-medium text-muted-foreground block mb-1">
+                        Due Date
+                      </label>
+                      <Input
+                        id="task-due-date"
+                        type="date"
+                        value={taskDueDate}
+                        onChange={(event) => setTaskDueDate(event.target.value)}
+                        className="h-9 text-sm"
+                      />
+                    </div>
+                  </div>
                   {taskError && (
                     <p role="alert" className="text-sm text-destructive">
                       {taskError}
