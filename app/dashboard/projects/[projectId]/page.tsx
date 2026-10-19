@@ -34,7 +34,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/app/components/ui/alert-dialog";
-import { AlertCircle, CheckCircle2, Loader2, Shield, Trash2, Users } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, RotateCw, Shield, Trash2, Users } from "lucide-react";
+import { memberInviteSchema, projectSchema, taskSchema } from "@/lib/validations";
 
 interface MemberItem {
   id: string;
@@ -133,6 +134,8 @@ export default function ProjectPage() {
   const [projectSaveSuccess, setProjectSaveSuccess] = useState("");
   const [isSavingDetails, setIsSavingDetails] = useState(false);
   const [isDeletingProject, setIsDeletingProject] = useState(false);
+  const [tasksError, setTasksError] = useState<string | null>(null);
+  const [membersError, setMembersError] = useState<string | null>(null);
 
   // Task creation states
   const [taskTitle, setTaskTitle] = useState("");
@@ -154,6 +157,7 @@ export default function ProjectPage() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
+        setMembersError(data?.message || `Failed to load members (${response.status})`);
         return;
       }
       const members = normalizeMembers(data);
@@ -166,8 +170,9 @@ export default function ProjectPage() {
             }
           : currentProject
       );
+      setMembersError(null);
     } catch {
-      // Suppress network error on background fetch
+      setMembersError("Unable to load project members. Please check your network connection.");
     }
   }, [projectId]);
 
@@ -192,12 +197,19 @@ export default function ProjectPage() {
             members: prev?.members,
             memberCount: normalized.memberCount ?? prev?.memberCount ?? 0,
           }));
+          setProjectError("");
         }
-      } else if (response.status === 404) {
-        setProjectError("Project not found or you do not have permission to view it.");
+      } else {
+        const errData = await response.json().catch(() => ({}));
+        setProjectError(
+          errData?.message ||
+            (response.status === 404
+              ? "Project not found or you do not have permission to view it."
+              : `Failed to load project details (${response.status})`)
+        );
       }
-    } catch (err) {
-      console.error("Failed to fetch project:", err);
+    } catch {
+      setProjectError("Unable to reach the project service. Please check your network connection.");
     }
   }, [projectId]);
 
@@ -229,11 +241,13 @@ export default function ProjectPage() {
           })
           .filter((t): t is Task => t !== null);
         setTasks(loadedTasks);
+        setTasksError(null);
       } else {
-        setTasks([]);
+        const errData = await response.json().catch(() => ({}));
+        setTasksError(errData?.message || `Failed to load tasks (${response.status})`);
       }
     } catch {
-      setTasks([]);
+      setTasksError("Unable to reach the task service. Please check your network connection.");
     } finally {
       setLoading(false);
     }
@@ -241,9 +255,10 @@ export default function ProjectPage() {
 
   useEffect(() => {
     if (!projectId) return;
-    void fetchProject();
-    void fetchTasks();
-    void fetchMembers();
+    const loadAll = async () => {
+      await Promise.all([fetchProject(), fetchTasks(), fetchMembers()]);
+    };
+    void loadAll();
   }, [projectId, fetchProject, fetchTasks, fetchMembers]);
 
   const deleteProject = async () => {
@@ -313,17 +328,18 @@ export default function ProjectPage() {
     setProjectSaveError("");
     setProjectSaveSuccess("");
 
-    if (!project.name.trim()) {
-      setProjectSaveError("Project name cannot be empty.");
-      return;
-    }
+    const validation = projectSchema.safeParse({
+      name: project.name,
+      description: project.description,
+      status: project.status ?? "Planning",
+      startDate: project.startDate,
+      endDate: project.endDate,
+    });
 
-    if (
-      project.startDate &&
-      project.endDate &&
-      new Date(project.endDate) < new Date(project.startDate)
-    ) {
-      setProjectSaveError("End date cannot be earlier than start date.");
+    if (!validation.success) {
+      setProjectSaveError(
+        validation.error.errors[0]?.message ?? "Please enter valid project details."
+      );
       return;
     }
 
@@ -349,8 +365,14 @@ export default function ProjectPage() {
       return;
     }
     const email = memberEmail.trim().toLowerCase();
-    if (!email) {
-      setMemberError("Enter the member's email address.");
+    const emailValidation = memberInviteSchema.safeParse({ email });
+    if (!emailValidation.success) {
+      setMemberError(emailValidation.error.errors[0]?.message ?? "Enter a valid email address.");
+      return;
+    }
+
+    if ((project?.members ?? []).some((m) => m.email?.toLowerCase() === email)) {
+      setMemberError("This user is already a member of this project.");
       return;
     }
 
@@ -433,7 +455,6 @@ export default function ProjectPage() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data?.message || "Member deletion failed");
-
       setProject((prev) =>
         prev
           ? {
@@ -458,7 +479,19 @@ export default function ProjectPage() {
       setTaskError("Select a project before creating a task.");
       return;
     }
-    if (!taskTitle.trim()) return;
+
+    const taskValidation = taskSchema.safeParse({
+      title: taskTitle,
+      description: taskDescription,
+      status: "todo",
+      assignedTo: taskAssignedTo || undefined,
+    });
+
+    if (!taskValidation.success) {
+      setTaskError(taskValidation.error.errors[0]?.message ?? "Task title is required.");
+      return;
+    }
+
     setIsCreatingTask(true);
     try {
       const response = await fetch(`${API_URL}/tasks/${projectId}`, {
@@ -491,12 +524,18 @@ export default function ProjectPage() {
       <DashboardLayout>
         <div className="flex h-64 items-center justify-center">
           {projectError ? (
-            <div className="text-center space-y-2">
+            <div className="text-center space-y-3 p-6 max-w-md mx-auto">
               <AlertCircle className="w-8 h-8 text-destructive mx-auto" />
               <p className="text-destructive font-medium">{projectError}</p>
-              <Button variant="outline" onClick={() => router.push("/dashboard")}>
-                Return to Dashboard
-              </Button>
+              <div className="flex items-center justify-center gap-3 pt-2">
+                <Button variant="default" onClick={() => void fetchProject()} className="gap-2">
+                  <RotateCw className="w-4 h-4" />
+                  Try again
+                </Button>
+                <Button variant="outline" onClick={() => router.push("/dashboard")}>
+                  Return to Dashboard
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="flex items-center gap-2 text-muted-foreground">
@@ -853,6 +892,15 @@ export default function ProjectPage() {
                         </div>
                       </div>
                     ))
+                  ) : membersError ? (
+                    <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-8 text-center space-y-3">
+                      <AlertCircle className="w-6 h-6 text-destructive mx-auto" />
+                      <p className="text-sm font-medium text-destructive">{membersError}</p>
+                      <Button variant="outline" size="sm" onClick={() => void fetchMembers()} className="gap-2">
+                        <RotateCw className="w-3.5 h-3.5" />
+                        Try again
+                      </Button>
+                    </div>
                   ) : (
                     <div className="text-center py-12 text-muted-foreground">
                       <Users className="w-8 h-8 mx-auto mb-2 opacity-40" />
@@ -922,7 +970,13 @@ export default function ProjectPage() {
                     {isCreatingTask ? "Creating..." : "Create task"}
                   </Button>
                 </form>
-                <TaskList tasks={tasks} loading={loading} projectId={projectId} />
+                <TaskList
+                  tasks={tasks}
+                  loading={loading}
+                  projectId={projectId}
+                  error={tasksError}
+                  onRetry={() => void fetchTasks()}
+                />
               </CardContent>
             </Card>
           </TabsContent>

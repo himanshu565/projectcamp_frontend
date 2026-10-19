@@ -13,15 +13,16 @@ const navItems = [
   // { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ]
 
-export function Sidebar() {
+export function Sidebar({ className, onNavigate }: { className?: string; onNavigate?: () => void } = {}) {
   const pathname = usePathname()
 
   const handleLogout = async () => {
+    onNavigate?.()
     await logout()
   }
 
   return (
-    <aside className="w-64 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col">
+    <aside className={cn("w-64 shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col h-full", className)}>
       <div className="h-16 flex items-center px-6 border-b border-sidebar-border">
         <div className="flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center shadow-sm">
@@ -40,6 +41,7 @@ export function Sidebar() {
             <Link
               key={item.href}
               href={item.href}
+              onClick={() => onNavigate?.()}
               className={cn(
                 "flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors",
                 isActive

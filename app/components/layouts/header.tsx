@@ -1,12 +1,27 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { Bell, LogOut, MailCheck, Search } from "lucide-react"
+import { Bell, LogOut, MailCheck, Menu, Search } from "lucide-react"
 import { Button } from "@/app/components/ui/button"
 import { Input } from "@/app/components/ui/input"
 import { ThemeToggle } from "@/app/components/ui/theme-toggle"
 import { Avatar, AvatarFallback } from "@/app/components/ui/avatar"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/app/components/ui/dropdown-menu"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/app/components/ui/dropdown-menu"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/app/components/ui/sheet"
+import { Sidebar } from "./sidebar"
 import { apiFetch, logout } from "@/lib/api"
 
 type CurrentUser = {
@@ -18,6 +33,7 @@ type CurrentUser = {
 }
 
 export function Header() {
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null)
   const [resendingEmail, setResendingEmail] = useState(false)
@@ -41,6 +57,17 @@ export function Header() {
       isMounted = false
     }
   }, [])
+
+  useEffect(() => {
+    if (!showNotifications) return
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowNotifications(false)
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [showNotifications])
 
   const handleLogout = async () => {
     await logout()
@@ -67,11 +94,36 @@ export function Header() {
     .toUpperCase()
 
   return (
-    <header className="h-16 shrink-0 border-b border-border bg-card/60 backdrop-blur supports-backdrop-filter:bg-card/60 flex items-center justify-between gap-4 px-6">
-      <div className="relative w-full max-w-sm">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <Input placeholder="Search projects, tasks, notes..." className="pl-9 h-9 bg-background" />
+    <header className="h-16 shrink-0 border-b border-border bg-card/60 backdrop-blur supports-backdrop-filter:bg-card/60 flex items-center justify-between gap-4 px-4 sm:px-6">
+      <div className="flex items-center gap-2 flex-1 max-w-sm">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="md:hidden text-foreground shrink-0"
+          onClick={() => setMobileNavOpen(true)}
+          aria-label="Open navigation menu"
+        >
+          <Menu className="w-5 h-5" />
+        </Button>
+        <div className="relative w-full">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <Input
+            placeholder="Search projects, tasks, notes..."
+            className="pl-9 h-9 bg-background"
+            aria-label="Search projects, tasks, notes"
+          />
+        </div>
       </div>
+
+      <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
+        <SheetContent side="left" className="p-0 w-72">
+          <SheetHeader className="sr-only">
+            <SheetTitle>Navigation Menu</SheetTitle>
+            <SheetDescription>Workspace navigation and links</SheetDescription>
+          </SheetHeader>
+          <Sidebar className="w-full border-r-0" onNavigate={() => setMobileNavOpen(false)} />
+        </SheetContent>
+      </Sheet>
 
       <div className="flex items-center gap-2">
         {currentUser && currentUser.isEmailVerified === false && (
@@ -119,7 +171,10 @@ export function Header() {
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-2 rounded-full pl-1 pr-2 py-1 hover:bg-accent transition-colors">
+            <button
+              className="flex items-center gap-2 rounded-full pl-1 pr-2 py-1 hover:bg-accent transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+              aria-label="User account menu"
+            >
               <Avatar className="size-7">
                 <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
                   {userInitial}

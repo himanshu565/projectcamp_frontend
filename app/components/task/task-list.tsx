@@ -2,8 +2,9 @@
 
 import { Card, CardContent } from "@/app/components/ui/card";
 import { Badge } from "@/app/components/ui/badge";
-import { CheckCircle2, Circle, Clock } from "lucide-react";
+import { AlertCircle, CheckCircle2, Circle, Clock, RotateCw } from "lucide-react";
 import Link from "next/link";
+import { Button } from "@/app/components/ui/button";
 
 interface Task {
   id: string;
@@ -17,9 +18,11 @@ interface TaskListProps {
   tasks: Task[];
   loading: boolean;
   projectId?: string;
+  error?: string | null;
+  onRetry?: () => void;
 }
 
-export function TaskList({ tasks, loading, projectId }: TaskListProps) {
+export function TaskList({ tasks, loading, projectId, error, onRetry }: TaskListProps) {
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "done":
@@ -60,6 +63,23 @@ export function TaskList({ tasks, loading, projectId }: TaskListProps) {
         {[...Array(3)].map((_, i) => (
           <div key={i} className="h-20 bg-muted/60 rounded-xl animate-pulse" />
         ))}
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-8 text-center space-y-3">
+        <div className="mx-auto w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center text-destructive">
+          <AlertCircle className="w-5 h-5" />
+        </div>
+        <p className="text-sm font-medium text-destructive">{error}</p>
+        {onRetry && (
+          <Button variant="outline" size="sm" onClick={onRetry} className="gap-2">
+            <RotateCw className="w-3.5 h-3.5" />
+            Try again
+          </Button>
+        )}
       </div>
     );
   }

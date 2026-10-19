@@ -1,7 +1,7 @@
 "use client";
 
-import { use, useEffect, useState } from "react";
-import { ArrowLeft, Plus, Trash2, CheckCircle2, Circle, Pencil } from "lucide-react";
+import { use, useCallback, useEffect, useState } from "react";
+import { ArrowLeft, Plus, Trash2, CheckCircle2, Circle, Pencil, AlertCircle, RotateCw, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { DashboardLayout } from "@/app/components/layouts/dashboard-layout";
 import { Button } from "@/app/components/ui/button";
@@ -9,6 +9,7 @@ import { Card } from "@/app/components/ui/card";
 import { Input } from "@/app/components/ui/input";
 import { Badge } from "@/app/components/ui/badge";
 import { API_URL, getApiCollection, getApiEntity, getAuthHeaders, normalizeProject } from "@/lib/api";
+import { subtaskSchema } from "@/lib/validations";
 
 const emptyTask = {
   id: "",
@@ -75,75 +76,126 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   const [editingSubtaskTitle, setEditingSubtaskTitle] = useState("");
   const [members, setMembers] = useState<TaskMember[]>([]);
   const [assignedTo, setAssignedTo] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const loadTask = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      let resolvedProjectId = new URLSearchParams(window.location.search).get("projectId");
+      if (!resolvedProjectId) {
+        const projectsResponse = await fetch(`${API_URL}/projects`, { credentials: "include" });
+        if (!projectsResponse.ok) {
+          const errData = await projectsResponse.json().catch(() => null);
+          setLoadError(errData?.message || "Failed to load projects.");
+          return;
+        }
+        const projectsData = await projectsResponse.json();
+        const projects = getApiCollection<Record<string, unknown>>(projectsData, "projects");
+        resolvedProjectId = normalizeProject(projects?.[0] ?? {})?.id ?? null;
+      }
+      if (!resolvedProjectId) {
+        setLoadError("No project found for this task.");
+        return;
+      }
+      setProjectId(resolvedProjectId);
+      const response = await fetch(`${API_URL}/tasks/${resolvedProjectId}/t/${taskId}`, {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        const errData = await response.json().catch(() => null);
+        setLoadError(
+          errData?.message ||
+            (response.status === 404
+              ? "Task not found."
+              : `Failed to load task (${response.status})`)
+        );
+        return;
+      }
+      const data = await response.json();
+      const taskRecord = getApiEntity<Record<string, unknown>>(data, "task");
+      if (!taskRecord?._id) {
+        setLoadError("Task data was invalid or missing ID.");
+        return;
+      }
+      const assignedUser =
+        taskRecord.assignedTo && typeof taskRecord.assignedTo === "object"
+          ? (taskRecord.assignedTo as Record<string, unknown>)
+          : null;
+      const loadedTask = {
+        ...emptyTask,
+        ...taskRecord,
+        id: String(taskRecord._id),
+        assignee: assignedUser
+          ? {
+              name: String(
+                assignedUser.fullName ??
+                  assignedUser.username ??
+                  assignedUser.name ??
+                  assignedUser.email ??
+                  "Unassigned"
+              ),
+              avatar: String(assignedUser.avatar ?? ""),
+            }
+          : emptyTask.assignee,
+        project:
+          taskRecord.project && typeof taskRecord.project === "object"
+            ? {
+                name: String(
+                  (taskRecord.project as Record<string, unknown>).name ?? "Project unavailable"
+                ),
+              }
+            : emptyTask.project,
+        subtasks: Array.isArray(taskRecord.subtasks)
+          ? taskRecord.subtasks
+              .map(normalizeSubtask)
+              .filter((subtask): subtask is Subtask => subtask !== null)
+          : emptyTask.subtasks,
+      };
+      setTask(loadedTask);
+      setStatus(statusToUi(taskRecord.status));
+      setAssignedTo(assignedUser?._id ? String(assignedUser._id) : "");
+      setSubtasks(loadedTask.subtasks);
+      setLoadError(null);
+
+      const membersResponse = await fetch(`${API_URL}/projects/${resolvedProjectId}/members`, {
+        headers: getAuthHeaders(),
+        credentials: "include",
+      });
+      if (membersResponse.ok) {
+        const membersData = await membersResponse.json();
+        const projectMembers = getApiCollection<Record<string, unknown>>(membersData, "members")
+          .map((member) => {
+            const user =
+              member.user && typeof member.user === "object"
+                ? (member.user as Record<string, unknown>)
+                : member;
+            const id = user._id ?? user.id;
+            if (!id) return null;
+            return {
+              id: String(id),
+              name: String(
+                user.fullName ?? user.username ?? user.name ?? user.email ?? "Unnamed member"
+              ),
+            };
+          })
+          .filter((member): member is TaskMember => member !== null);
+        setMembers(projectMembers);
+      }
+    } catch {
+      setLoadError("Unable to connect to the task service. Please check your network connection.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [taskId]);
 
   useEffect(() => {
-    const loadTask = async () => {
-      try {
-        let resolvedProjectId = new URLSearchParams(window.location.search).get("projectId");
-        if (!resolvedProjectId) {
-          const projectsResponse = await fetch(`${API_URL}/projects`, { credentials: "include" });
-          if (!projectsResponse.ok) return;
-          const projectsData = await projectsResponse.json();
-          const projects = getApiCollection<Record<string, unknown>>(projectsData, "projects");
-          resolvedProjectId = normalizeProject(projects?.[0] ?? {})?.id ?? null;
-        }
-        if (!resolvedProjectId) return;
-        setProjectId(resolvedProjectId);
-        const response = await fetch(`${API_URL}/tasks/${resolvedProjectId}/t/${taskId}`, { credentials: "include" });
-        if (!response.ok) return;
-        const data = await response.json();
-        const taskRecord = getApiEntity<Record<string, unknown>>(data, "task");
-        if (!taskRecord?._id) return;
-        const assignedUser = taskRecord.assignedTo && typeof taskRecord.assignedTo === "object"
-          ? taskRecord.assignedTo as Record<string, unknown>
-          : null;
-        const loadedTask = {
-          ...emptyTask,
-          ...taskRecord,
-          id: String(taskRecord._id),
-          assignee: assignedUser
-            ? { name: String(assignedUser.fullName ?? assignedUser.username ?? assignedUser.name ?? assignedUser.email ?? "Unassigned"), avatar: String(assignedUser.avatar ?? "") }
-            : emptyTask.assignee,
-          project: taskRecord.project && typeof taskRecord.project === "object"
-            ? { name: String((taskRecord.project as Record<string, unknown>).name ?? "Project unavailable") }
-            : emptyTask.project,
-          subtasks: Array.isArray(taskRecord.subtasks)
-            ? taskRecord.subtasks.map(normalizeSubtask).filter((subtask): subtask is Subtask => subtask !== null)
-            : emptyTask.subtasks,
-        };
-        setTask(loadedTask);
-        setStatus(statusToUi(taskRecord.status));
-        setAssignedTo(assignedUser?._id ? String(assignedUser._id) : "");
-        setSubtasks(loadedTask.subtasks);
-
-        const membersResponse = await fetch(`${API_URL}/projects/${resolvedProjectId}/members`, {
-          headers: getAuthHeaders(),
-          credentials: "include",
-        });
-        if (membersResponse.ok) {
-          const membersData = await membersResponse.json();
-          const projectMembers = getApiCollection<Record<string, unknown>>(membersData, "members")
-            .map((member) => {
-              const user = member.user && typeof member.user === "object"
-                ? member.user as Record<string, unknown>
-                : member;
-              const id = user._id ?? user.id;
-              if (!id) return null;
-              return {
-                id: String(id),
-                name: String(user.fullName ?? user.username ?? user.name ?? user.email ?? "Unnamed member"),
-              };
-            })
-            .filter((member): member is TaskMember => member !== null);
-          setMembers(projectMembers);
-        }
-      } catch (error) {
-        console.error("Failed to fetch task:", error);
-      }
+    const init = async () => {
+      await loadTask();
     };
-
-    loadTask();
-  }, [taskId]);
+    void init();
+  }, [loadTask]);
 
   const updateTaskStatus = async (nextStatus: string, nextAssignedTo = assignedTo) => {
     if (!projectId || !taskId) return;
@@ -215,14 +267,18 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   };
 
   const addSubtask = async () => {
-    if (!newSubtask.trim()) return;
+    const parseResult = subtaskSchema.safeParse({ title: newSubtask });
+    if (!parseResult.success) {
+      setSubtaskError(parseResult.error.errors[0]?.message || "Invalid subtask title");
+      return;
+    }
     setSubtaskError("");
     try {
       if (!projectId) throw new Error("Project unavailable");
       const response = await fetch(`${API_URL}/tasks/${projectId}/t/${taskId}/subtasks`, {
         method: "POST",
         headers: { ...getAuthHeaders(), "Content-Type": "application/json" },
-        body: JSON.stringify({ title: newSubtask.trim() }),
+        body: JSON.stringify({ title: parseResult.data.title }),
         credentials: "include",
       });
       const data = await response.json().catch(() => ({}));
@@ -254,11 +310,14 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
   };
 
   const saveSubtaskTitle = async (id: string) => {
-    const title = editingSubtaskTitle.trim();
-    if (!title) return;
+    const parseResult = subtaskSchema.safeParse({ title: editingSubtaskTitle });
+    if (!parseResult.success) {
+      setSubtaskError(parseResult.error.errors[0]?.message || "Invalid subtask title");
+      return;
+    }
     setSubtaskError("");
     try {
-      await updateSubtask(id, { title });
+      await updateSubtask(id, { title: parseResult.data.title });
       setEditingSubtaskId(null);
       setEditingSubtaskTitle("");
     } catch (error) {
@@ -268,6 +327,40 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
 
   const completedCount = subtasks.filter((subtask) => subtask.completed).length;
   const completionPercentage = subtasks.length > 0 ? (completedCount / subtasks.length) * 100 : 0;
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="max-w-5xl mx-auto py-16 flex flex-col items-center justify-center gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <p className="text-muted-foreground text-sm">Loading task details...</p>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <DashboardLayout>
+        <div className="max-w-5xl mx-auto py-12">
+          <Card className="p-6 border-destructive/30 bg-destructive/5 text-center">
+            <AlertCircle className="w-10 h-10 text-destructive mx-auto mb-3" />
+            <h2 className="text-lg font-semibold text-foreground mb-1">Failed to Load Task</h2>
+            <p className="text-sm text-muted-foreground mb-4">{loadError}</p>
+            <div className="flex items-center justify-center gap-3">
+              <Button onClick={() => void loadTask()} variant="default" className="gap-2">
+                <RotateCw className="w-4 h-4" />
+                Try again
+              </Button>
+              <Link href="/dashboard/tasks">
+                <Button variant="outline">Back to tasks</Button>
+              </Link>
+            </div>
+          </Card>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
@@ -328,41 +421,47 @@ export default function TaskDetailPage({ params }: { params: Promise<{ id: strin
               {subtaskError && <p role="alert" className="mb-4 text-sm text-destructive">{subtaskError}</p>}
               <div className="mb-6"><div className="flex items-center justify-between mb-2"><span className="text-sm font-medium text-foreground">Progress</span><span className="text-sm text-muted-foreground">{Math.round(completionPercentage)}%</span></div><div className="w-full bg-muted rounded-full h-2"><div className="bg-primary h-2 rounded-full transition-all duration-300" style={{ width: `${completionPercentage}%` }} /></div></div>
               <div className="space-y-2 mb-6">
-                {subtasks.map((subtask) => (
-                  <div key={subtask.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/60 hover:bg-muted transition-colors">
-                    <button onClick={() => toggleSubtask(subtask.id)} aria-label={`Mark ${subtask.title} ${subtask.completed ? "incomplete" : "complete"}`} className="shrink-0 text-primary hover:text-primary/80 transition-colors">{subtask.completed ? <CheckCircle2 className="w-5 h-5" /> : <Circle className="w-5 h-5" />}</button>
-                    <div className="flex-1 min-w-0">
+                {subtasks.length === 0 ? (
+                  <p className="text-sm text-muted-foreground italic py-4 text-center">
+                    No subtasks yet. Add one below to track granular progress.
+                  </p>
+                ) : (
+                  subtasks.map((subtask) => (
+                    <div key={subtask.id} className="flex items-center gap-3 p-3 rounded-lg bg-muted/60 hover:bg-muted transition-colors">
+                      <button onClick={() => toggleSubtask(subtask.id)} aria-label={`Mark ${subtask.title} ${subtask.completed ? "incomplete" : "complete"}`} className="shrink-0 text-primary hover:text-primary/80 transition-colors">{subtask.completed ? <CheckCircle2 className="w-5 h-5" /> : <Circle className="w-5 h-5" />}</button>
+                      <div className="flex-1 min-w-0">
+                        {editingSubtaskId === subtask.id ? (
+                          <Input
+                            value={editingSubtaskTitle}
+                            onChange={(event) => setEditingSubtaskTitle(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") { event.preventDefault(); void saveSubtaskTitle(subtask.id); }
+                              if (event.key === "Escape") setEditingSubtaskId(null);
+                            }}
+                            autoFocus
+                            aria-label={`Edit ${subtask.title}`}
+                            className="h-8"
+                          />
+                        ) : (
+                          <p className={`text-sm font-medium ${subtask.completed ? "text-muted-foreground line-through" : "text-foreground"}`}>{subtask.title}</p>
+                        )}
+                        <p className="text-xs text-muted-foreground">{subtask.assignee}</p>
+                      </div>
                       {editingSubtaskId === subtask.id ? (
-                        <Input
-                          value={editingSubtaskTitle}
-                          onChange={(event) => setEditingSubtaskTitle(event.target.value)}
-                          onKeyDown={(event) => {
-                            if (event.key === "Enter") { event.preventDefault(); void saveSubtaskTitle(subtask.id); }
-                            if (event.key === "Escape") setEditingSubtaskId(null);
-                          }}
-                          autoFocus
-                          aria-label={`Edit ${subtask.title}`}
-                          className="h-8"
-                        />
+                        <Button variant="ghost" size="sm" onClick={() => void saveSubtaskTitle(subtask.id)}>Save</Button>
                       ) : (
-                        <p className={`text-sm font-medium ${subtask.completed ? "text-muted-foreground line-through" : "text-foreground"}`}>{subtask.title}</p>
+                        <button
+                          onClick={() => { setEditingSubtaskId(subtask.id); setEditingSubtaskTitle(subtask.title); }}
+                          aria-label={`Edit ${subtask.title}`}
+                          className="shrink-0 text-muted-foreground hover:text-primary"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
                       )}
-                      <p className="text-xs text-muted-foreground">{subtask.assignee}</p>
+                      <button onClick={() => deleteSubtask(subtask.id)} aria-label={`Delete ${subtask.title}`} className="shrink-0 text-muted-foreground hover:text-destructive transition-colors"><Trash2 className="w-4 h-4" /></button>
                     </div>
-                    {editingSubtaskId === subtask.id ? (
-                      <Button variant="ghost" size="sm" onClick={() => void saveSubtaskTitle(subtask.id)}>Save</Button>
-                    ) : (
-                      <button
-                        onClick={() => { setEditingSubtaskId(subtask.id); setEditingSubtaskTitle(subtask.title); }}
-                        aria-label={`Edit ${subtask.title}`}
-                        className="shrink-0 text-muted-foreground hover:text-primary"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                    )}
-                    <button onClick={() => deleteSubtask(subtask.id)} aria-label={`Delete ${subtask.title}`} className="shrink-0 text-muted-foreground hover:text-destructive transition-colors"><Trash2 className="w-4 h-4" /></button>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
               <div className="flex gap-2"><Input placeholder="Add a new subtask..." value={newSubtask} onChange={(event) => setNewSubtask(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void addSubtask(); } }} className="flex-1" /><Button onClick={() => void addSubtask()} size="sm" className="gap-2"><Plus className="w-4 h-4" />Add</Button></div>
             </Card>

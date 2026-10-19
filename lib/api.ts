@@ -158,7 +158,7 @@ export async function logout(): Promise<void> {
   } finally {
     if (typeof window !== "undefined") {
       localStorage.removeItem("token");
-      window.location.href = "/";
+      window.location.replace("/");
     }
   }
 }

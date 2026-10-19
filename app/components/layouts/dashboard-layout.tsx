@@ -55,11 +55,11 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
 
   return (
     <div className="flex h-screen bg-background">
-      <Sidebar />
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <Sidebar className="hidden md:flex" />
+      <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         <Header />
         <main className="flex-1 overflow-auto">
-          <div className="max-w-7xl mx-auto p-6 lg:p-8">{children}</div>
+          <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">{children}</div>
         </main>
       </div>
     </div>

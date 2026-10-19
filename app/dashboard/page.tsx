@@ -1,12 +1,13 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { DashboardLayout } from "@/app/components/layouts/dashboard-layout"
 import { ProjectCard } from "@/app/components/projects/project-card"
 import { Button } from "@/app/components/ui/button"
 import { Input } from "@/app/components/ui/input"
 import { API_URL, getApiCollection, getApiEntity, normalizeProject } from "@/lib/api"
-import { FolderKanban, Loader2, Plus, Search, X } from "lucide-react"
+import { projectSchema } from "@/lib/validations"
+import { AlertCircle, FolderKanban, Loader2, Plus, RotateCw, Search, X } from "lucide-react"
 
 interface ProjectItem {
   id: string
@@ -22,6 +23,7 @@ interface ProjectItem {
 export default function DashboardPage() {
   const [projects, setProjects] = useState<ProjectItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
 
   // Project creation form state
@@ -38,18 +40,25 @@ export default function DashboardPage() {
   const [projectError, setProjectError] = useState("")
   const [creationNotice, setCreationNotice] = useState("")
 
-  const loadProjects = async () => {
+  const loadProjects = useCallback(async () => {
     setIsLoading(true)
+    setLoadError(null)
     try {
       const response = await fetch(`${API_URL}/projects`, { credentials: "include" })
       if (!response.ok) {
-        setProjects([])
+        const errData = await response.json().catch(() => null)
+        const errMsg =
+          errData?.message ||
+          (response.status === 401
+            ? "Please sign in to view your projects."
+            : `Failed to load projects (${response.status})`)
+        setLoadError(errMsg)
         return
       }
       const data = await response.json()
       const loadedProjects = getApiCollection<Record<string, unknown>>(data, "projects")
       if (!Array.isArray(loadedProjects)) {
-        setProjects([])
+        setLoadError("Invalid data format received from project service.")
         return
       }
       const normalizedProjects = loadedProjects
@@ -66,16 +75,20 @@ export default function DashboardPage() {
           memberCount: project.memberCount ?? 0,
         }))
       setProjects(normalizedProjects)
+      setLoadError(null)
     } catch {
-      setProjects([])
+      setLoadError("Unable to connect to the project service. Please check your network connection.")
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
-    loadProjects()
-  }, [])
+    const init = async () => {
+      await loadProjects()
+    }
+    void init()
+  }, [loadProjects])
 
   const addMemberEmail = () => {
     setMemberEmailError("")
@@ -100,18 +113,25 @@ export default function DashboardPage() {
 
   const handleCreateProject = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!name.trim()) return
     setProjectError("")
     setCreationNotice("")
+
+    const validation = projectSchema.safeParse({
+      name,
+      description,
+      status,
+      startDate,
+      endDate,
+    })
+
+    if (!validation.success) {
+      setProjectError(validation.error.errors[0]?.message ?? "Please enter valid project details.")
+      return
+    }
 
     const normalizedName = name.trim().toLowerCase()
     if (projects.some((project) => project.name.trim().toLowerCase() === normalizedName)) {
       setProjectError("A project with this name already exists. Choose a different name.")
-      return
-    }
-
-    if (startDate && endDate && new Date(endDate) < new Date(startDate)) {
-      setProjectError("End date cannot be earlier than start date.")
       return
     }
 
@@ -438,6 +458,24 @@ export default function DashboardPage() {
                 <div className="h-4 w-1/3 rounded bg-muted pt-2 border-t" />
               </div>
             ))}
+          </div>
+        ) : loadError ? (
+          <div className="rounded-2xl border border-destructive/30 bg-destructive/5 p-12 text-center space-y-4">
+            <div className="mx-auto w-12 h-12 rounded-xl bg-destructive/10 flex items-center justify-center text-destructive mb-2">
+              <AlertCircle className="w-6 h-6" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">Failed to load projects</h2>
+              <p className="text-muted-foreground text-sm max-w-md mx-auto mt-1">
+                {loadError}
+              </p>
+            </div>
+            <div className="flex justify-center gap-3 pt-2">
+              <Button onClick={() => void loadProjects()} variant="default" className="gap-2">
+                <RotateCw className="w-4 h-4" />
+                Try again
+              </Button>
+            </div>
           </div>
         ) : filteredProjects.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">

@@ -5,8 +5,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "type-check": "tsc --noEmit --incremental false",
+    "test": "node --test --experimental-strip-types"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
